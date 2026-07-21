@@ -9,6 +9,17 @@ namespace Kakikomi;
 
 public sealed partial class MainPage : Page
 {
+    private static readonly Color IdleBg = Color.FromArgb(255, 248, 250, 252);
+    private static readonly Color IdleFg = Color.FromArgb(255, 15, 23, 42);
+    private static readonly Color IdleBorder = Color.FromArgb(255, 71, 85, 105);
+    private static readonly Color SelectedRateBg = Color.FromArgb(255, 13, 148, 136);
+    private static readonly Color SelectedRateBorder = Color.FromArgb(255, 15, 118, 110);
+    private static readonly Color White = Color.FromArgb(255, 255, 255, 255);
+    private static readonly Color PlayStoppedBg = Color.FromArgb(255, 220, 38, 38);
+    private static readonly Color PlayStoppedBorder = Color.FromArgb(255, 127, 29, 29);
+    private static readonly Color PlayPlayingBg = Color.FromArgb(255, 37, 99, 235);
+    private static readonly Color PlayPlayingBorder = Color.FromArgb(255, 30, 64, 175);
+
     public MainPageViewModel ViewModel { get; }
 
     public MainPage()
@@ -28,21 +39,49 @@ public sealed partial class MainPage : Page
         ViewModel.TimelineSliderSync += OnTimelineSliderSync;
         AppSettings.Changed += OnAppSettingsChanged;
         App.SettingsOpenFailed += OnSettingsOpenFailed;
-        ViewModel.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(ViewModel.IsEditMode))
-                UpdateEditModeButtonLook();
-            if (e.PropertyName == nameof(ViewModel.IsPlaying))
-                InkLayer.IsHitTestVisible = !ViewModel.IsPlaying;
-        };
+        ViewModel.PropertyChanged += OnViewModelPropertyChanged;
         InkLayer.IsHitTestVisible = !ViewModel.IsPlaying;
-        ApplyAntiWhiteHoverBrushes();
+
+        ApplyButtonBrushes(PickFolderBtn);
+        ApplyButtonBrushes(RefreshBtn);
+        ApplyButtonBrushes(EditModeBtn);
+        ApplyButtonBrushes(SettingsBtn);
+        ApplyButtonBrushes(SkipBackBtn);
+        ApplyButtonBrushes(SkipForwardBtn);
+        ApplyButtonBrushes(ClearInkBtn);
+
+        UpdatePlayToggleLook();
+        UpdateRateToggleLooks();
+        UpdateEraserToggleLook();
         UpdateEditModeButtonLook();
         ApplyPenSwatches();
         UpdateDemoWatermark();
         ViewModel.SetPenRed();
         OnTimelineSliderSync(ViewModel.TimelinePosition, ViewModel.TimelineMaximum);
         await ViewModel.LoadSavedFolderAsync();
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ViewModel.IsEditMode))
+            UpdateEditModeButtonLook();
+
+        if (e.PropertyName == nameof(ViewModel.IsPlaying))
+        {
+            InkLayer.IsHitTestVisible = !ViewModel.IsPlaying;
+            UpdatePlayToggleLook();
+        }
+
+        if (e.PropertyName is nameof(ViewModel.IsRateNormal)
+            or nameof(ViewModel.IsRateHalf)
+            or nameof(ViewModel.IsRateQuarter)
+            or nameof(ViewModel.IsRateDouble))
+        {
+            UpdateRateToggleLooks();
+        }
+
+        if (e.PropertyName == nameof(ViewModel.IsPenEraser))
+            UpdateEraserToggleLook();
     }
 
     private void OnAppSettingsChanged()
@@ -74,135 +113,65 @@ public sealed partial class MainPage : Page
         PenBlueSwatch.Fill = new SolidColorBrush(AppSettings.PenBlue);
     }
 
-    private void ApplyAntiWhiteHoverBrushes()
-    {
-        ApplyButtonBrushes(PickFolderBtn);
-        ApplyButtonBrushes(RefreshBtn);
-        ApplyButtonBrushes(EditModeBtn);
-        ApplyButtonBrushes(SettingsBtn);
-        ApplyButtonBrushes(SkipBackBtn);
-        ApplyButtonBrushes(SkipForwardBtn);
-        ApplyButtonBrushes(ClearInkBtn);
-
-        ApplyPlayToggleBrushes(PlayToggle);
-        ApplyToggleBrushes(RateNormalBtn, checkedBg: Color.FromArgb(255, 13, 148, 136), checkedHover: Color.FromArgb(255, 20, 184, 166), checkedPressed: Color.FromArgb(255, 15, 118, 110));
-        ApplyToggleBrushes(RateHalfBtn, checkedBg: Color.FromArgb(255, 13, 148, 136), checkedHover: Color.FromArgb(255, 20, 184, 166), checkedPressed: Color.FromArgb(255, 15, 118, 110));
-        ApplyToggleBrushes(RateQuarterBtn, checkedBg: Color.FromArgb(255, 13, 148, 136), checkedHover: Color.FromArgb(255, 20, 184, 166), checkedPressed: Color.FromArgb(255, 15, 118, 110));
-        ApplyToggleBrushes(RateDoubleBtn, checkedBg: Color.FromArgb(255, 13, 148, 136), checkedHover: Color.FromArgb(255, 20, 184, 166), checkedPressed: Color.FromArgb(255, 15, 118, 110));
-
-        ApplyToggleBrushes(PenEraserBtn, checkedBg: Color.FromArgb(255, 71, 85, 105), checkedHover: Color.FromArgb(255, 100, 116, 139), checkedPressed: Color.FromArgb(255, 51, 65, 85));
-    }
-
     private static void ApplyButtonBrushes(FrameworkElement button)
     {
-        var normal = Color.FromArgb(255, 248, 250, 252);
         var hover = Color.FromArgb(255, 226, 232, 240);
         var pressed = Color.FromArgb(255, 203, 213, 225);
-        var fg = Color.FromArgb(255, 15, 23, 42);
-        var border = Color.FromArgb(255, 71, 85, 105);
         var borderHot = Color.FromArgb(255, 51, 65, 85);
 
-        SetBrush(button, "ButtonBackground", normal);
+        SetBrush(button, "ButtonBackground", IdleBg);
         SetBrush(button, "ButtonBackgroundPointerOver", hover);
         SetBrush(button, "ButtonBackgroundPressed", pressed);
         SetBrush(button, "ButtonBackgroundDisabled", Color.FromArgb(255, 71, 85, 105));
-        SetBrush(button, "ButtonForeground", fg);
-        SetBrush(button, "ButtonForegroundPointerOver", fg);
+        SetBrush(button, "ButtonForeground", IdleFg);
+        SetBrush(button, "ButtonForegroundPointerOver", IdleFg);
         SetBrush(button, "ButtonForegroundPressed", Color.FromArgb(255, 30, 41, 59));
         SetBrush(button, "ButtonForegroundDisabled", Color.FromArgb(255, 148, 163, 184));
-        SetBrush(button, "ButtonBorderBrush", border);
+        SetBrush(button, "ButtonBorderBrush", IdleBorder);
         SetBrush(button, "ButtonBorderBrushPointerOver", borderHot);
         SetBrush(button, "ButtonBorderBrushPressed", Color.FromArgb(255, 30, 41, 59));
         SetBrush(button, "ButtonBorderBrushDisabled", Color.FromArgb(255, 51, 65, 85));
 
         if (button is Control control)
-        {
-            control.Background = new SolidColorBrush(normal);
-            control.Foreground = new SolidColorBrush(fg);
-            control.BorderBrush = new SolidColorBrush(border);
-        }
+            ApplyChrome(control, IdleBg, IdleFg, IdleBorder);
     }
 
-    private static void ApplyPlayToggleBrushes(FrameworkElement button)
+    private void UpdatePlayToggleLook()
     {
-        // 再生/停止は状態色を維持（文字は白）
-        var stopped = Color.FromArgb(255, 220, 38, 38);
-        var stoppedHover = Color.FromArgb(255, 239, 68, 68);
-        var stoppedPressed = Color.FromArgb(255, 185, 28, 28);
-        var playing = Color.FromArgb(255, 37, 99, 235);
-        var playingHover = Color.FromArgb(255, 59, 130, 246);
-        var playingPressed = Color.FromArgb(255, 29, 78, 216);
-        var fg = Color.FromArgb(255, 255, 255, 255);
-        var border = Color.FromArgb(255, 127, 29, 29);
-        var borderHot = Color.FromArgb(255, 153, 27, 27);
-
-        SetBrush(button, "ToggleButtonBackground", stopped);
-        SetBrush(button, "ToggleButtonBackgroundPointerOver", stoppedHover);
-        SetBrush(button, "ToggleButtonBackgroundPressed", stoppedPressed);
-        SetBrush(button, "ToggleButtonBackgroundChecked", playing);
-        SetBrush(button, "ToggleButtonBackgroundCheckedPointerOver", playingHover);
-        SetBrush(button, "ToggleButtonBackgroundCheckedPressed", playingPressed);
-        SetBrush(button, "ToggleButtonForeground", fg);
-        SetBrush(button, "ToggleButtonForegroundPointerOver", fg);
-        SetBrush(button, "ToggleButtonForegroundPressed", fg);
-        SetBrush(button, "ToggleButtonForegroundChecked", fg);
-        SetBrush(button, "ToggleButtonForegroundCheckedPointerOver", fg);
-        SetBrush(button, "ToggleButtonForegroundCheckedPressed", fg);
-        SetBrush(button, "ToggleButtonBorderBrush", border);
-        SetBrush(button, "ToggleButtonBorderBrushPointerOver", borderHot);
-        SetBrush(button, "ToggleButtonBorderBrushPressed", Color.FromArgb(255, 69, 10, 10));
-        SetBrush(button, "ToggleButtonBorderBrushChecked", Color.FromArgb(255, 30, 64, 175));
-        SetBrush(button, "ToggleButtonBorderBrushCheckedPointerOver", Color.FromArgb(255, 37, 99, 235));
-        SetBrush(button, "ToggleButtonBorderBrushCheckedPressed", Color.FromArgb(255, 30, 58, 138));
-
-        if (button is Control control)
-        {
-            control.Background = new SolidColorBrush(stopped);
-            control.Foreground = new SolidColorBrush(fg);
-            control.BorderBrush = new SolidColorBrush(border);
-        }
+        if (ViewModel.IsPlaying)
+            ApplyChrome(PlayToggle, PlayPlayingBg, White, PlayPlayingBorder);
+        else
+            ApplyChrome(PlayToggle, PlayStoppedBg, White, PlayStoppedBorder);
     }
 
-    private static void ApplyToggleBrushes(FrameworkElement button, Color checkedBg, Color checkedHover, Color checkedPressed)
+    private void UpdateRateToggleLooks()
     {
-        var normal = Color.FromArgb(255, 248, 250, 252);
-        var hover = Color.FromArgb(255, 226, 232, 240);
-        var pressed = Color.FromArgb(255, 203, 213, 225);
-        var fg = Color.FromArgb(255, 15, 23, 42);
-        var white = Color.FromArgb(255, 255, 255, 255);
-        var border = Color.FromArgb(255, 71, 85, 105);
-        var borderHot = Color.FromArgb(255, 51, 65, 85);
-        var borderChecked = Color.FromArgb(
-            255,
-            (byte)Math.Max(0, checkedBg.R - 40),
-            (byte)Math.Max(0, checkedBg.G - 40),
-            (byte)Math.Max(0, checkedBg.B - 40));
+        ApplySelectionChrome(RateNormalBtn, ViewModel.IsRateNormal, SelectedRateBg, SelectedRateBorder);
+        ApplySelectionChrome(RateHalfBtn, ViewModel.IsRateHalf, SelectedRateBg, SelectedRateBorder);
+        ApplySelectionChrome(RateQuarterBtn, ViewModel.IsRateQuarter, SelectedRateBg, SelectedRateBorder);
+        ApplySelectionChrome(RateDoubleBtn, ViewModel.IsRateDouble, SelectedRateBg, SelectedRateBorder);
+    }
 
-        SetBrush(button, "ToggleButtonBackground", normal);
-        SetBrush(button, "ToggleButtonBackgroundPointerOver", hover);
-        SetBrush(button, "ToggleButtonBackgroundPressed", pressed);
-        SetBrush(button, "ToggleButtonBackgroundChecked", checkedBg);
-        SetBrush(button, "ToggleButtonBackgroundCheckedPointerOver", checkedHover);
-        SetBrush(button, "ToggleButtonBackgroundCheckedPressed", checkedPressed);
-        SetBrush(button, "ToggleButtonForeground", fg);
-        SetBrush(button, "ToggleButtonForegroundPointerOver", fg);
-        SetBrush(button, "ToggleButtonForegroundPressed", Color.FromArgb(255, 30, 41, 59));
-        SetBrush(button, "ToggleButtonForegroundChecked", white);
-        SetBrush(button, "ToggleButtonForegroundCheckedPointerOver", white);
-        SetBrush(button, "ToggleButtonForegroundCheckedPressed", white);
-        SetBrush(button, "ToggleButtonBorderBrush", border);
-        SetBrush(button, "ToggleButtonBorderBrushPointerOver", borderHot);
-        SetBrush(button, "ToggleButtonBorderBrushPressed", Color.FromArgb(255, 100, 116, 139));
-        SetBrush(button, "ToggleButtonBorderBrushChecked", borderChecked);
-        SetBrush(button, "ToggleButtonBorderBrushCheckedPointerOver", borderChecked);
-        SetBrush(button, "ToggleButtonBorderBrushCheckedPressed", borderChecked);
+    private void UpdateEraserToggleLook()
+    {
+        var checkedBg = Color.FromArgb(255, 71, 85, 105);
+        var checkedBorder = Color.FromArgb(255, 51, 65, 85);
+        ApplySelectionChrome(PenEraserBtn, ViewModel.IsPenEraser, checkedBg, checkedBorder);
+    }
 
-        if (button is Control control)
-        {
-            control.Background = new SolidColorBrush(normal);
-            control.Foreground = new SolidColorBrush(fg);
-            control.BorderBrush = new SolidColorBrush(border);
-        }
+    private static void ApplySelectionChrome(Control button, bool selected, Color selectedBg, Color selectedBorder)
+    {
+        if (selected)
+            ApplyChrome(button, selectedBg, White, selectedBorder);
+        else
+            ApplyChrome(button, IdleBg, IdleFg, IdleBorder);
+    }
+
+    private static void ApplyChrome(Control button, Color background, Color foreground, Color border)
+    {
+        button.Background = new SolidColorBrush(background);
+        button.Foreground = new SolidColorBrush(foreground);
+        button.BorderBrush = new SolidColorBrush(border);
     }
 
     private static void SetBrush(FrameworkElement element, string key, Color color)
@@ -214,22 +183,14 @@ public sealed partial class MainPage : Page
     {
         if (ViewModel.IsEditMode)
         {
-            EditModeBtn.Background = new SolidColorBrush(Color.FromArgb(255, 13, 148, 136));
-            EditModeBtn.Foreground = new SolidColorBrush(Color.FromArgb(255, 255, 255, 255));
-            EditModeBtn.BorderBrush = new SolidColorBrush(Color.FromArgb(255, 15, 118, 110));
-            SettingsBtn.Background = new SolidColorBrush(Color.FromArgb(255, 248, 250, 252));
-            SettingsBtn.Foreground = new SolidColorBrush(Color.FromArgb(255, 15, 23, 42));
-            SettingsBtn.BorderBrush = new SolidColorBrush(Color.FromArgb(255, 71, 85, 105));
+            ApplyChrome(EditModeBtn, SelectedRateBg, White, SelectedRateBorder);
+            ApplyChrome(SettingsBtn, IdleBg, IdleFg, IdleBorder);
             SettingsBtn.Opacity = 1;
         }
         else
         {
-            EditModeBtn.Background = new SolidColorBrush(Color.FromArgb(255, 248, 250, 252));
-            EditModeBtn.Foreground = new SolidColorBrush(Color.FromArgb(255, 100, 116, 139));
-            EditModeBtn.BorderBrush = new SolidColorBrush(Color.FromArgb(255, 71, 85, 105));
-            SettingsBtn.Background = new SolidColorBrush(Color.FromArgb(255, 226, 232, 240));
-            SettingsBtn.Foreground = new SolidColorBrush(Color.FromArgb(255, 148, 163, 184));
-            SettingsBtn.BorderBrush = new SolidColorBrush(Color.FromArgb(255, 100, 116, 139));
+            ApplyChrome(EditModeBtn, IdleBg, Color.FromArgb(255, 100, 116, 139), IdleBorder);
+            ApplyChrome(SettingsBtn, Color.FromArgb(255, 226, 232, 240), Color.FromArgb(255, 148, 163, 184), Color.FromArgb(255, 100, 116, 139));
             SettingsBtn.Opacity = 0.55;
         }
     }

@@ -198,14 +198,12 @@
                     VerticalScrollBarVisibility="Disabled"
                     VerticalScrollMode="Disabled">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                    <ToggleButton
+                    <Button
                         x:Name="PlayToggle"
-                        Style="{StaticResource OpToggleStyle}"
+                        Style="{StaticResource OpButtonStyle}"
                         MinWidth="120"
                         Command="{x:Bind ViewModel.PlayPauseCommand}"
-                        Content="再生/停止"
-                        IsChecked="{x:Bind ViewModel.IsPlaying, Mode=OneWay}"
-                        IsThreeState="False" />
+                        Content="再生/停止" />
 
                     <Button
                         x:Name="SkipBackBtn"
