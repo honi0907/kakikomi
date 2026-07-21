@@ -319,24 +319,13 @@
             </Grid>
         </Border>
 
-        <!-- DEMO ウォーターマーク（コンパネ全体） -->
-        <TextBlock
+        <!-- DEMO ウォーターマーク（画面全体に敷き詰め） -->
+        <controls:DemoWatermarkOverlay
             x:Name="DemoWatermark"
             Grid.RowSpan="3"
             Grid.ColumnSpan="2"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            FontSize="160"
-            FontWeight="Bold"
-            Foreground="#66EF4444"
-            IsHitTestVisible="False"
-            Opacity="0.4"
-            RenderTransformOrigin="0.5,0.5"
-            Text="DEMO"
-            Visibility="Collapsed">
-            <TextBlock.RenderTransform>
-                <RotateTransform Angle="-28" />
-            </TextBlock.RenderTransform>
-        </TextBlock>
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
+            Visibility="Collapsed" />
     </Grid>
 </Page>
