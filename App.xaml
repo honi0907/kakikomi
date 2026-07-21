@@ -69,12 +69,7 @@
                                                     <Setter Target="OuterRim.Padding" Value="2,3,2,1" />
                                                 </VisualState.Setters>
                                             </VisualState>
-                                            <VisualState x:Name="Disabled">
-                                                <VisualState.Setters>
-                                                    <Setter Target="RootBorder.Opacity" Value="0.55" />
-                                                    <Setter Target="OuterRim.Opacity" Value="0.55" />
-                                                </VisualState.Setters>
-                                            </VisualState>
+                                            <VisualState x:Name="Disabled" />
                                         </VisualStateGroup>
                                     </VisualStateManager.VisualStateGroups>
                                     <ContentPresenter

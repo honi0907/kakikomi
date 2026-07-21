@@ -17,6 +17,7 @@ public sealed class DesignInkCanvas : Canvas
     private double _thickness = 6;
     private bool _isEraser;
     private bool _drawing;
+    private uint? _activePointerId;
     private const double EraserRadius = 28;
 
     public DesignInkCanvas()
@@ -24,6 +25,8 @@ public sealed class DesignInkCanvas : Canvas
         Width = EngineSession.DesignWidth;
         Height = EngineSession.DesignHeight;
         Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
+        // ピンチ等のマニピュレーションを起こさない
+        ManipulationMode = ManipulationModes.None;
         PointerPressed += OnPointerPressed;
         PointerMoved += OnPointerMoved;
         PointerReleased += OnPointerReleased;
@@ -82,11 +85,14 @@ public sealed class DesignInkCanvas : Canvas
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        // 書き込みは停止中のみ
+        // 書き込みは停止中のみ。描画中の追加指は無視（シングルタッチ）
         if (!_inputEnabled || _session is null || _session.IsPlaying)
+            return;
+        if (_drawing || _activePointerId is not null)
             return;
 
         _drawing = true;
+        _activePointerId = e.Pointer.PointerId;
         CapturePointer(e.Pointer);
         var point = Clamp(e.GetCurrentPoint(this).Position);
         if (_isEraser)
@@ -99,6 +105,8 @@ public sealed class DesignInkCanvas : Canvas
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         if (!_drawing || _session is null || _session.IsPlaying)
+            return;
+        if (_activePointerId != e.Pointer.PointerId)
             return;
 
         var point = Clamp(e.GetCurrentPoint(this).Position);
@@ -113,8 +121,11 @@ public sealed class DesignInkCanvas : Canvas
     {
         if (!_drawing || _session is null)
             return;
+        if (_activePointerId != e.Pointer.PointerId)
+            return;
 
         _drawing = false;
+        _activePointerId = null;
         ReleasePointerCapture(e.Pointer);
         if (!_isEraser)
             _session.EndStroke();

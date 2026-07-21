@@ -19,6 +19,9 @@ public sealed partial class MainPage : Page
     private static readonly Color PlayStoppedBorder = Color.FromArgb(255, 127, 29, 29);
     private static readonly Color PlayPlayingBg = Color.FromArgb(255, 37, 99, 235);
     private static readonly Color PlayPlayingBorder = Color.FromArgb(255, 30, 64, 175);
+    private static readonly Color DisabledBg = Color.FromArgb(255, 51, 65, 85);
+    private static readonly Color DisabledFg = Color.FromArgb(255, 148, 163, 184);
+    private static readonly Color DisabledBorder = Color.FromArgb(255, 30, 41, 59);
 
     public MainPageViewModel ViewModel { get; }
 
@@ -184,14 +187,16 @@ public sealed partial class MainPage : Page
         if (ViewModel.IsEditMode)
         {
             ApplyChrome(EditModeBtn, SelectedRateBg, White, SelectedRateBorder);
+            ApplyChrome(PickFolderBtn, IdleBg, IdleFg, IdleBorder);
+            ApplyChrome(RefreshBtn, IdleBg, IdleFg, IdleBorder);
             ApplyChrome(SettingsBtn, IdleBg, IdleFg, IdleBorder);
-            SettingsBtn.Opacity = 1;
         }
         else
         {
             ApplyChrome(EditModeBtn, IdleBg, Color.FromArgb(255, 100, 116, 139), IdleBorder);
-            ApplyChrome(SettingsBtn, Color.FromArgb(255, 226, 232, 240), Color.FromArgb(255, 148, 163, 184), Color.FromArgb(255, 100, 116, 139));
-            SettingsBtn.Opacity = 0.55;
+            ApplyChrome(PickFolderBtn, DisabledBg, DisabledFg, DisabledBorder);
+            ApplyChrome(RefreshBtn, DisabledBg, DisabledFg, DisabledBorder);
+            ApplyChrome(SettingsBtn, DisabledBg, DisabledFg, DisabledBorder);
         }
     }
 
