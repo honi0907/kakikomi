@@ -68,16 +68,44 @@
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="models:NetaItem">
                             <Border
-                                Padding="8,10"
+                                Padding="6"
                                 Background="#FF1E293B"
                                 BorderBrush="{StaticResource OpPanelBorderBrush}"
                                 BorderThickness="1"
                                 CornerRadius="0">
-                                <TextBlock
-                                    FontSize="15"
-                                    Foreground="{StaticResource OpTextBrush}"
-                                    Text="{x:Bind DisplayName}"
-                                    TextWrapping="WrapWholeWords" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="84" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border
+                                        Width="84"
+                                        Height="47"
+                                        Background="#FF020617"
+                                        BorderBrush="#FF334155"
+                                        BorderThickness="1">
+                                        <Grid>
+                                            <TextBlock
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                FontSize="10"
+                                                Foreground="#FF64748B"
+                                                Text="…" />
+                                            <Image
+                                                Stretch="UniformToFill"
+                                                Source="{x:Bind Thumbnail, Mode=OneWay}" />
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        FontSize="11"
+                                        Foreground="{StaticResource OpTextBrush}"
+                                        Text="{x:Bind DisplayName}"
+                                        TextWrapping="WrapWholeWords"
+                                        TextTrimming="CharacterEllipsis"
+                                        MaxLines="3" />
+                                </Grid>
                             </Border>
                         </DataTemplate>
                     </ListView.ItemTemplate>

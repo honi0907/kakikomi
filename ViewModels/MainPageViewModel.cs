@@ -14,6 +14,7 @@ public partial class MainPageViewModel : ObservableObject
     private readonly EngineSession _session;
     private readonly InkAutoSave _inkAutoSave;
     private readonly DispatcherQueueTimer _timelineTimer;
+    private CancellationTokenSource? _thumbnailLoadCts;
     private bool _isUserSeeking;
     private double _timelineDurationSeconds;
     private DateTime _lastPreviewSeekUtc;
@@ -441,9 +442,32 @@ public partial class MainPageViewModel : ObservableObject
 
     private void ReplaceNetaList(IReadOnlyList<NetaItem> items)
     {
+        _thumbnailLoadCts?.Cancel();
+        _thumbnailLoadCts?.Dispose();
+        _thumbnailLoadCts = new CancellationTokenSource();
+        var token = _thumbnailLoadCts.Token;
+
         NetaItems.Clear();
         foreach (var item in items)
             NetaItems.Add(item);
+
+        _ = LoadThumbnailsAsync(items, token);
+    }
+
+    private static async Task LoadThumbnailsAsync(IReadOnlyList<NetaItem> items, CancellationToken token)
+    {
+        try
+        {
+            await VideoThumbnailLoader.LoadAsync(items, token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // 一覧差し替え
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ThumbnailLoad] {ex}");
+        }
     }
 
     private void OnTimelineEvent()
