@@ -121,7 +121,7 @@
                     <TextBlock
                         Foreground="#FF94A3B8"
                         TextWrapping="Wrap"
-                        Text="ペンで描き込んでから 1 秒後に、その時点の映像フレーム＋書き込みを PNG（1920×1080）として自動保存します。再生開始時は書き込みが消え、待ち中の保存は先に実行されます。" />
+                        Text="ペンで描き込んでから 1 秒後に、その時点の映像フレーム＋書き込みを PNG（1920×1080）として自動保存します。再生開始時は書き込みが消え、待ち中の保存は先に実行されます。ポータブル版は exe 隣の save、インストール版は LocalAppData\Kakikomi\save に保存します。" />
                     <TextBlock
                         x:Name="SaveFolderPathText"
                         FontFamily="Consolas"

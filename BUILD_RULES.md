@@ -46,6 +46,15 @@ GitHub Release まで出す場合（`origin` + `gh` 必須）:
 | ポータブル ZIP | `dist\Kakikomi-{version}-x64-portable.zip` |
 | publish フォルダ | `dist\Kakikomi\` |
 
+### 保存フォルダ（PNG）
+
+| 起動形態 | 保存先 |
+|----------|--------|
+| ポータブル（exe 隣に書ける） | `{exe}\save\` |
+| インストール版（Program Files 等） | `%LocalAppData%\Kakikomi\save\` |
+
+設定 → 保存 に実パスを表示し、「save フォルダを開く」でそこを開く。
+
 - **毎回** Setup とポータブル ZIP の両方を生成する。
 - `dist` には当該バージョンの成果物のみ残す（旧 `*-Setup.exe` / `*-portable.zip` は削除）。
 
@@ -66,7 +75,7 @@ GitHub Release まで出す場合（`origin` + `gh` 必須）:
 - `Kakikomi.csproj` の `<Version>` / `<AssemblyVersion>` / `<FileVersion>` を揃える。
 - パッチは **0〜9**（例: `1.0.0` … `1.0.9`）。**`1.0.9` の次は `1.1.0`**（`1.0.10` にはしない）。
 - リリースのたびに必ず上げ、同じ tag / ファイル名の再利用はしない。
-- 現状: **1.0.2**
+- 現状: **1.0.3**
 
 ## オンライン更新（アプリ内）
 
