@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Window
+    x:Class="Kakikomi.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Kakikomi 設定">
+
+    <Grid Background="#FF0F172A" RequestedTheme="Dark">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="220" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Border
+            Grid.Column="0"
+            Padding="12"
+            Background="#FF020617"
+            BorderBrush="#FF334155"
+            BorderThickness="0,0,1,0">
+            <ListView
+                x:Name="NavList"
+                SelectionMode="Single">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Padding" Value="12,10" />
+                        <Setter Property="Margin" Value="0,0,0,4" />
+                        <Setter Property="MinHeight" Value="0" />
+                    </Style>
+                </ListView.ItemContainerStyle>
+                <ListViewItem Tag="Exit" Content="ソフト終了" Margin="0,0,0,20" />
+                <ListViewItem Tag="Version" Content="バージョン / 更新" />
+                <ListViewItem Tag="Demo" Content="DEMOモード" />
+                <ListViewItem Tag="Clean" Content="クリーン出力" />
+                <ListViewItem Tag="Save" Content="保存" />
+                <ListViewItem Tag="Palette" Content="パレットの色編集" />
+                <ListViewItem Tag="PenSize" Content="ペンサイズ" />
+                <ListViewItem Tag="FullSize" Content="コンパネ起動サイズ" />
+            </ListView>
+        </Border>
+
+        <ScrollViewer
+            Grid.Column="1"
+            Padding="24"
+            VerticalScrollBarVisibility="Auto">
+            <Grid>
+                <StackPanel x:Name="PanelVersion" Spacing="16" Visibility="Collapsed">
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="#FFF8FAFC" Text="バージョン / 更新" />
+                    <TextBlock
+                        x:Name="VersionInfoText"
+                        FontSize="16"
+                        Foreground="#FFE2E8F0"
+                        Text="Kakikomi v1.0.0" />
+                    <TextBlock
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
+                        Text="GitHub Release の Setup インストーラーを取得して更新します。開発ビルド（bin）からは適用できません。" />
+                    <Button
+                        x:Name="OnlineUpdateBtn"
+                        MinWidth="220"
+                        MinHeight="44"
+                        Content="オンライン更新を確認" />
+                    <TextBlock
+                        x:Name="UpdateStatusText"
+                        Foreground="#FF94A3B8"
+                        FontSize="13"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+
+                <StackPanel x:Name="PanelDemo" Spacing="16" Visibility="Collapsed">
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="#FFF8FAFC" Text="DEMOモード" />
+                    <TextBlock
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
+                        Text="ON のとき、コンパネとクリーン出力に「DEMO」ウォーターマークを表示します。既定は ON です。" />
+                    <TextBlock
+                        x:Name="DemoStatusText"
+                        FontSize="18"
+                        FontWeight="SemiBold"
+                        Foreground="#FFFBBF24"
+                        Text="状態: ON" />
+                    <StackPanel x:Name="DemoUnlockPanel" Spacing="12">
+                        <PasswordBox
+                            x:Name="DemoPasswordBox"
+                            Header="解除パスワード"
+                            PlaceholderText="パスワードを入力" />
+                        <TextBlock
+                            x:Name="DemoUnlockErrorText"
+                            Foreground="#FFF87171"
+                            TextWrapping="Wrap"
+                            Visibility="Collapsed" />
+                        <Button
+                            x:Name="DemoUnlockBtn"
+                            MinWidth="180"
+                            MinHeight="44"
+                            Content="DEMOを解除" />
+                    </StackPanel>
+                    <Button
+                        x:Name="DemoEnableBtn"
+                        MinWidth="220"
+                        MinHeight="44"
+                        Content="DEMOモードを再度ONにする"
+                        Visibility="Collapsed" />
+                </StackPanel>
+
+                <StackPanel x:Name="PanelClean" Spacing="16" Visibility="Collapsed">
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="#FFF8FAFC" Text="クリーン出力" />
+                    <TextBlock
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
+                        Text="拡張ディスプレイ（セカンダリ）へクリーン映像を出力します。セカンダリ接続時は自動でも起動します。" />
+                    <Button
+                        x:Name="OpenCleanBtn"
+                        MinWidth="180"
+                        MinHeight="44"
+                        Content="クリーン出力を開く" />
+                </StackPanel>
+
+                <StackPanel x:Name="PanelSave" Spacing="16" Visibility="Collapsed">
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="#FFF8FAFC" Text="保存" />
+                    <TextBlock
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
+                        Text="ペンで描き込んでから 1 秒後に、その時点の映像フレーム＋書き込みを PNG（1920×1080）として自動保存します。再生開始時は書き込みが消え、待ち中の保存は先に実行されます。" />
+                    <TextBlock
+                        x:Name="SaveFolderPathText"
+                        FontFamily="Consolas"
+                        FontSize="13"
+                        Foreground="#FFE2E8F0"
+                        IsTextSelectionEnabled="True"
+                        TextWrapping="Wrap" />
+                    <Button
+                        x:Name="OpenSaveFolderBtn"
+                        MinWidth="220"
+                        MinHeight="44"
+                        Content="save フォルダを開く" />
+                </StackPanel>
+
+                <StackPanel x:Name="PanelExit" Spacing="16" Visibility="Collapsed">
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="#FFF8FAFC" Text="ソフト終了" />
+                    <TextBlock
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
+                        Text="Kakikomi を終了します。クリーン出力ウィンドウもあわせて閉じます。" />
+                    <Button
+                        x:Name="ExitAppBtn"
+                        MinWidth="180"
+                        MinHeight="44"
+                        Content="アプリを終了" />
+                </StackPanel>
+
+                <StackPanel x:Name="PanelPalette" Spacing="12" Visibility="Collapsed">
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="#FFF8FAFC" Text="パレットの色編集" />
+                    <TextBlock
+                        Foreground="#FF94A3B8"
+                        Text="HEX（例: #EF4444）で指定。適用で反映・保存します。" />
+
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Ellipse x:Name="SwatchRed" Width="28" Height="28" VerticalAlignment="Center" />
+                        <TextBox x:Name="HexRed" Grid.Column="1" Header="ペン1" PlaceholderText="#EF4444" />
+                        <Button x:Name="ApplyRedBtn" Grid.Column="2" VerticalAlignment="Bottom" Content="適用" MinWidth="72" />
+                    </Grid>
+
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Ellipse x:Name="SwatchGreen" Width="28" Height="28" VerticalAlignment="Center" />
+                        <TextBox x:Name="HexGreen" Grid.Column="1" Header="ペン2" PlaceholderText="#22C55E" />
+                        <Button x:Name="ApplyGreenBtn" Grid.Column="2" VerticalAlignment="Bottom" Content="適用" MinWidth="72" />
+                    </Grid>
+
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Ellipse x:Name="SwatchBlue" Width="28" Height="28" VerticalAlignment="Center" />
+                        <TextBox x:Name="HexBlue" Grid.Column="1" Header="ペン3" PlaceholderText="#3B82F6" />
+                        <Button x:Name="ApplyBlueBtn" Grid.Column="2" VerticalAlignment="Bottom" Content="適用" MinWidth="72" />
+                    </Grid>
+                </StackPanel>
+
+                <StackPanel x:Name="PanelPenSize" Spacing="16" Visibility="Collapsed">
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="#FFF8FAFC" Text="ペンサイズ" />
+                    <TextBlock Foreground="#FF94A3B8" Text="描画ペンと消しゴムの太さを変更します。" />
+                    <NumberBox
+                        x:Name="PenSizeBox"
+                        Header="ペン太さ"
+                        Minimum="1"
+                        Maximum="40"
+                        SmallChange="1"
+                        LargeChange="2"
+                        SpinButtonPlacementMode="Inline" />
+                    <NumberBox
+                        x:Name="EraserSizeBox"
+                        Header="消しゴム太さ"
+                        Minimum="4"
+                        Maximum="80"
+                        SmallChange="1"
+                        LargeChange="4"
+                        SpinButtonPlacementMode="Inline" />
+                </StackPanel>
+
+                <StackPanel x:Name="PanelFullSize" Spacing="16" Visibility="Collapsed">
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="#FFF8FAFC" Text="コンパネ起動サイズ" />
+                    <TextBlock
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
+                        Text="次回起動時の最大化と、いますぐフルスクリーンにする操作を分けています。" />
+                    <CheckBox
+                        x:Name="FullSizeNextLaunchCheck"
+                        Content="次回起動時にフルサイズ（最大化）で開く"
+                        Foreground="#FFE2E8F0" />
+                    <Button
+                        x:Name="FullScreenNowBtn"
+                        MinWidth="220"
+                        MinHeight="44"
+                        Content="いまフルスクリーンにする" />
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</Window>

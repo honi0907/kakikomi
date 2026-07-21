@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Kakikomi (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Kakikomi (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
