@@ -56,16 +56,17 @@ GitHub Release まで出す場合（`origin` + `gh` 必須）:
 | **GitHub Release** | Setup.exe + portable.zip |
 | **オンライン更新** | Setup.exe のみをダウンロード → インストーラー起動 |
 
-- リポジトリ: `honi0907/kakikomi`
+- リポジトリ: `honi0907/kakikomi`（**公開**。オンライン更新はトークン無しで Release を読む）
 - tag: `v{version}`（例: `v1.0.0`）
 - 開発ビルド（`bin/`）では自己更新の適用をブロック
+- プライベートにする場合は環境変数 `KAKIKOMI_GITHUB_TOKEN` が必要
 
 ## バージョン
 
 - `Kakikomi.csproj` の `<Version>` / `<AssemblyVersion>` / `<FileVersion>` を揃える。
 - パッチは **0〜9**（例: `1.0.0` … `1.0.9`）。**`1.0.9` の次は `1.1.0`**（`1.0.10` にはしない）。
 - リリースのたびに必ず上げ、同じ tag / ファイル名の再利用はしない。
-- 現状: **1.0.0**
+- 現状: **1.0.1**
 
 ## オンライン更新（アプリ内）
 

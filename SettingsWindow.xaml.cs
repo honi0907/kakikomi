@@ -268,9 +268,12 @@ public sealed partial class SettingsWindow : Window
 
     private static void StyleActionButton(Button button)
     {
+        button.Style = (Style)Application.Current.Resources["OpButtonStyle"];
         button.Background = new SolidColorBrush(Color.FromArgb(255, 248, 250, 252));
         button.Foreground = new SolidColorBrush(Color.FromArgb(255, 15, 23, 42));
-        button.BorderBrush = new SolidColorBrush(Color.FromArgb(255, 203, 213, 225));
-        button.BorderThickness = new Thickness(1);
+        button.BorderBrush = new SolidColorBrush(Color.FromArgb(255, 71, 85, 105));
+        button.FontSize = 16;
+        button.MinHeight = 44;
+        button.Padding = new Thickness(16, 10, 16, 10);
     }
 }

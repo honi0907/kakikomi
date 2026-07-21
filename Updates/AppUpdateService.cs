@@ -33,7 +33,11 @@ public sealed class AppUpdateService
             {
                 release = await FindLatestReleaseAsync(profile, githubToken, cancellationToken);
                 if (release is null)
-                    return AppUpdateCheckResult.Fail($"GitHub Release が見つかりません（tag 接頭辞: {profile.ReleaseTagPrefix}）。");
+                {
+                    return AppUpdateCheckResult.Fail(
+                        $"GitHub Release が取得できません（{profile.GitHubRepo} / tag 接頭辞: {profile.ReleaseTagPrefix}）。" +
+                        "リポジトリが非公開の場合は公開するか、環境変数 KAKIKOMI_GITHUB_TOKEN を設定してください。");
+                }
             }
         }
         catch (Exception ex)

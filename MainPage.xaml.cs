@@ -99,8 +99,8 @@ public sealed partial class MainPage : Page
         var hover = Color.FromArgb(255, 226, 232, 240);
         var pressed = Color.FromArgb(255, 203, 213, 225);
         var fg = Color.FromArgb(255, 15, 23, 42);
-        var border = Color.FromArgb(255, 203, 213, 225);
-        var borderHot = Color.FromArgb(255, 148, 163, 184);
+        var border = Color.FromArgb(255, 71, 85, 105);
+        var borderHot = Color.FromArgb(255, 51, 65, 85);
 
         SetBrush(button, "ButtonBackground", normal);
         SetBrush(button, "ButtonBackgroundPointerOver", hover);
@@ -112,7 +112,7 @@ public sealed partial class MainPage : Page
         SetBrush(button, "ButtonForegroundDisabled", Color.FromArgb(255, 148, 163, 184));
         SetBrush(button, "ButtonBorderBrush", border);
         SetBrush(button, "ButtonBorderBrushPointerOver", borderHot);
-        SetBrush(button, "ButtonBorderBrushPressed", Color.FromArgb(255, 100, 116, 139));
+        SetBrush(button, "ButtonBorderBrushPressed", Color.FromArgb(255, 30, 41, 59));
         SetBrush(button, "ButtonBorderBrushDisabled", Color.FromArgb(255, 51, 65, 85));
 
         if (button is Control control)
@@ -133,8 +133,8 @@ public sealed partial class MainPage : Page
         var playingHover = Color.FromArgb(255, 59, 130, 246);
         var playingPressed = Color.FromArgb(255, 29, 78, 216);
         var fg = Color.FromArgb(255, 255, 255, 255);
-        var border = Color.FromArgb(255, 203, 213, 225);
-        var borderHot = Color.FromArgb(255, 248, 250, 252);
+        var border = Color.FromArgb(255, 127, 29, 29);
+        var borderHot = Color.FromArgb(255, 153, 27, 27);
 
         SetBrush(button, "ToggleButtonBackground", stopped);
         SetBrush(button, "ToggleButtonBackgroundPointerOver", stoppedHover);
@@ -150,10 +150,10 @@ public sealed partial class MainPage : Page
         SetBrush(button, "ToggleButtonForegroundCheckedPressed", fg);
         SetBrush(button, "ToggleButtonBorderBrush", border);
         SetBrush(button, "ToggleButtonBorderBrushPointerOver", borderHot);
-        SetBrush(button, "ToggleButtonBorderBrushPressed", Color.FromArgb(255, 148, 163, 184));
-        SetBrush(button, "ToggleButtonBorderBrushChecked", Color.FromArgb(255, 96, 165, 250));
-        SetBrush(button, "ToggleButtonBorderBrushCheckedPointerOver", Color.FromArgb(255, 147, 197, 253));
-        SetBrush(button, "ToggleButtonBorderBrushCheckedPressed", Color.FromArgb(255, 59, 130, 246));
+        SetBrush(button, "ToggleButtonBorderBrushPressed", Color.FromArgb(255, 69, 10, 10));
+        SetBrush(button, "ToggleButtonBorderBrushChecked", Color.FromArgb(255, 30, 64, 175));
+        SetBrush(button, "ToggleButtonBorderBrushCheckedPointerOver", Color.FromArgb(255, 37, 99, 235));
+        SetBrush(button, "ToggleButtonBorderBrushCheckedPressed", Color.FromArgb(255, 30, 58, 138));
 
         if (button is Control control)
         {
@@ -170,13 +170,13 @@ public sealed partial class MainPage : Page
         var pressed = Color.FromArgb(255, 203, 213, 225);
         var fg = Color.FromArgb(255, 15, 23, 42);
         var white = Color.FromArgb(255, 255, 255, 255);
-        var border = Color.FromArgb(255, 203, 213, 225);
-        var borderHot = Color.FromArgb(255, 148, 163, 184);
+        var border = Color.FromArgb(255, 71, 85, 105);
+        var borderHot = Color.FromArgb(255, 51, 65, 85);
         var borderChecked = Color.FromArgb(
             255,
-            (byte)Math.Min(255, checkedBg.R + 40),
-            (byte)Math.Min(255, checkedBg.G + 40),
-            (byte)Math.Min(255, checkedBg.B + 40));
+            (byte)Math.Max(0, checkedBg.R - 40),
+            (byte)Math.Max(0, checkedBg.G - 40),
+            (byte)Math.Max(0, checkedBg.B - 40));
 
         SetBrush(button, "ToggleButtonBackground", normal);
         SetBrush(button, "ToggleButtonBackgroundPointerOver", hover);
@@ -216,20 +216,20 @@ public sealed partial class MainPage : Page
         {
             EditModeBtn.Background = new SolidColorBrush(Color.FromArgb(255, 13, 148, 136));
             EditModeBtn.Foreground = new SolidColorBrush(Color.FromArgb(255, 255, 255, 255));
-            EditModeBtn.BorderBrush = new SolidColorBrush(Color.FromArgb(255, 45, 212, 191));
+            EditModeBtn.BorderBrush = new SolidColorBrush(Color.FromArgb(255, 15, 118, 110));
             SettingsBtn.Background = new SolidColorBrush(Color.FromArgb(255, 248, 250, 252));
             SettingsBtn.Foreground = new SolidColorBrush(Color.FromArgb(255, 15, 23, 42));
-            SettingsBtn.BorderBrush = new SolidColorBrush(Color.FromArgb(255, 203, 213, 225));
+            SettingsBtn.BorderBrush = new SolidColorBrush(Color.FromArgb(255, 71, 85, 105));
             SettingsBtn.Opacity = 1;
         }
         else
         {
             EditModeBtn.Background = new SolidColorBrush(Color.FromArgb(255, 248, 250, 252));
             EditModeBtn.Foreground = new SolidColorBrush(Color.FromArgb(255, 100, 116, 139));
-            EditModeBtn.BorderBrush = new SolidColorBrush(Color.FromArgb(255, 203, 213, 225));
+            EditModeBtn.BorderBrush = new SolidColorBrush(Color.FromArgb(255, 71, 85, 105));
             SettingsBtn.Background = new SolidColorBrush(Color.FromArgb(255, 226, 232, 240));
             SettingsBtn.Foreground = new SolidColorBrush(Color.FromArgb(255, 148, 163, 184));
-            SettingsBtn.BorderBrush = new SolidColorBrush(Color.FromArgb(255, 203, 213, 225));
+            SettingsBtn.BorderBrush = new SolidColorBrush(Color.FromArgb(255, 100, 116, 139));
             SettingsBtn.Opacity = 0.55;
         }
     }

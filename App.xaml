@@ -22,54 +22,61 @@
                 <Setter Property="FontWeight" Value="SemiBold" />
                 <Setter Property="CornerRadius" Value="0" />
                 <Setter Property="Foreground" Value="#FF0F172A" />
-                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="Padding" Value="8,6" />
                 <Setter Property="HorizontalContentAlignment" Value="Center" />
                 <Setter Property="VerticalContentAlignment" Value="Center" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
+                            <!-- 外側を少し暗いリムで囲み、斜めグラデなしで立体感 -->
                             <Border
-                                x:Name="RootBorder"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
+                                x:Name="OuterRim"
+                                Background="{TemplateBinding BorderBrush}"
+                                Padding="2"
                                 CornerRadius="{TemplateBinding CornerRadius}">
-                                <VisualStateManager.VisualStateGroups>
-                                    <VisualStateGroup x:Name="CommonStates">
-                                        <VisualState x:Name="Normal" />
-                                        <VisualState x:Name="PointerOver">
-                                            <VisualState.Setters>
-                                                <Setter Target="RootBorder.Background" Value="{ThemeResource ButtonBackgroundPointerOver}" />
-                                                <Setter Target="RootBorder.BorderBrush" Value="{ThemeResource ButtonBorderBrushPointerOver}" />
-                                                <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource ButtonForegroundPointerOver}" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Pressed">
-                                            <VisualState.Setters>
-                                                <Setter Target="RootBorder.Background" Value="{ThemeResource ButtonBackgroundPressed}" />
-                                                <Setter Target="RootBorder.BorderBrush" Value="{ThemeResource ButtonBorderBrushPressed}" />
-                                                <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource ButtonForegroundPressed}" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Disabled">
-                                            <VisualState.Setters>
-                                                <Setter Target="RootBorder.Background" Value="{ThemeResource ButtonBackgroundDisabled}" />
-                                                <Setter Target="RootBorder.BorderBrush" Value="{ThemeResource ButtonBorderBrushDisabled}" />
-                                                <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource ButtonForegroundDisabled}" />
-                                                <Setter Target="RootBorder.Opacity" Value="0.55" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                    </VisualStateGroup>
-                                </VisualStateManager.VisualStateGroups>
-                                <ContentPresenter
-                                    x:Name="ContentPresenter"
-                                    Padding="{TemplateBinding Padding}"
-                                    HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                    VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
-                                    Content="{TemplateBinding Content}"
-                                    ContentTemplate="{TemplateBinding ContentTemplate}"
-                                    Foreground="{TemplateBinding Foreground}" />
+                                <Border
+                                    x:Name="RootBorder"
+                                    Background="{TemplateBinding Background}"
+                                    BorderThickness="0"
+                                    CornerRadius="{TemplateBinding CornerRadius}">
+                                    <VisualStateManager.VisualStateGroups>
+                                        <VisualStateGroup x:Name="CommonStates">
+                                            <VisualState x:Name="Normal" />
+                                            <VisualState x:Name="PointerOver">
+                                                <VisualState.Setters>
+                                                    <Setter Target="RootBorder.Background" Value="{ThemeResource ButtonBackgroundPointerOver}" />
+                                                    <Setter Target="OuterRim.Background" Value="{ThemeResource ButtonBorderBrushPointerOver}" />
+                                                    <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource ButtonForegroundPointerOver}" />
+                                                </VisualState.Setters>
+                                            </VisualState>
+                                            <VisualState x:Name="Pressed">
+                                                <VisualState.Setters>
+                                                    <Setter Target="RootBorder.Background" Value="{ThemeResource ButtonBackgroundPressed}" />
+                                                    <Setter Target="OuterRim.Background" Value="{ThemeResource ButtonBorderBrushPressed}" />
+                                                    <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource ButtonForegroundPressed}" />
+                                                    <Setter Target="OuterRim.Padding" Value="2,3,2,1" />
+                                                </VisualState.Setters>
+                                            </VisualState>
+                                            <VisualState x:Name="Disabled">
+                                                <VisualState.Setters>
+                                                    <Setter Target="RootBorder.Background" Value="{ThemeResource ButtonBackgroundDisabled}" />
+                                                    <Setter Target="OuterRim.Background" Value="{ThemeResource ButtonBorderBrushDisabled}" />
+                                                    <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource ButtonForegroundDisabled}" />
+                                                    <Setter Target="OuterRim.Opacity" Value="0.55" />
+                                                </VisualState.Setters>
+                                            </VisualState>
+                                        </VisualStateGroup>
+                                    </VisualStateManager.VisualStateGroups>
+                                    <ContentPresenter
+                                        x:Name="ContentPresenter"
+                                        Padding="{TemplateBinding Padding}"
+                                        HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                        VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                        Content="{TemplateBinding Content}"
+                                        ContentTemplate="{TemplateBinding ContentTemplate}"
+                                        Foreground="{TemplateBinding Foreground}" />
+                                </Border>
                             </Border>
                         </ControlTemplate>
                     </Setter.Value>
@@ -80,7 +87,7 @@
                 <Setter Property="FontWeight" Value="SemiBold" />
                 <Setter Property="CornerRadius" Value="0" />
                 <Setter Property="Foreground" Value="#FF0F172A" />
-                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="Padding" Value="0" />
                 <Setter Property="HorizontalContentAlignment" Value="Center" />
                 <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -88,69 +95,76 @@
                     <Setter.Value>
                         <ControlTemplate TargetType="ToggleButton">
                             <Border
-                                x:Name="RootBorder"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
+                                x:Name="OuterRim"
+                                Background="{TemplateBinding BorderBrush}"
+                                Padding="2"
                                 CornerRadius="{TemplateBinding CornerRadius}">
-                                <VisualStateManager.VisualStateGroups>
-                                    <VisualStateGroup x:Name="CommonStates">
-                                        <VisualState x:Name="Normal" />
-                                        <VisualState x:Name="PointerOver">
-                                            <VisualState.Setters>
-                                                <Setter Target="RootBorder.Background" Value="{ThemeResource ToggleButtonBackgroundPointerOver}" />
-                                                <Setter Target="RootBorder.BorderBrush" Value="{ThemeResource ToggleButtonBorderBrushPointerOver}" />
-                                                <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource ToggleButtonForegroundPointerOver}" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Pressed">
-                                            <VisualState.Setters>
-                                                <Setter Target="RootBorder.Background" Value="{ThemeResource ToggleButtonBackgroundPressed}" />
-                                                <Setter Target="RootBorder.BorderBrush" Value="{ThemeResource ToggleButtonBorderBrushPressed}" />
-                                                <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource ToggleButtonForegroundPressed}" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Disabled">
-                                            <VisualState.Setters>
-                                                <Setter Target="RootBorder.Opacity" Value="0.55" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Checked">
-                                            <VisualState.Setters>
-                                                <Setter Target="RootBorder.Background" Value="{ThemeResource ToggleButtonBackgroundChecked}" />
-                                                <Setter Target="RootBorder.BorderBrush" Value="{ThemeResource ToggleButtonBorderBrushChecked}" />
-                                                <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource ToggleButtonForegroundChecked}" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="CheckedPointerOver">
-                                            <VisualState.Setters>
-                                                <Setter Target="RootBorder.Background" Value="{ThemeResource ToggleButtonBackgroundCheckedPointerOver}" />
-                                                <Setter Target="RootBorder.BorderBrush" Value="{ThemeResource ToggleButtonBorderBrushCheckedPointerOver}" />
-                                                <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource ToggleButtonForegroundCheckedPointerOver}" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="CheckedPressed">
-                                            <VisualState.Setters>
-                                                <Setter Target="RootBorder.Background" Value="{ThemeResource ToggleButtonBackgroundCheckedPressed}" />
-                                                <Setter Target="RootBorder.BorderBrush" Value="{ThemeResource ToggleButtonBorderBrushCheckedPressed}" />
-                                                <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource ToggleButtonForegroundCheckedPressed}" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="CheckedDisabled" />
-                                        <VisualState x:Name="Indeterminate" />
-                                        <VisualState x:Name="IndeterminatePointerOver" />
-                                        <VisualState x:Name="IndeterminatePressed" />
-                                        <VisualState x:Name="IndeterminateDisabled" />
-                                    </VisualStateGroup>
-                                </VisualStateManager.VisualStateGroups>
-                                <ContentPresenter
-                                    x:Name="ContentPresenter"
-                                    Padding="{TemplateBinding Padding}"
-                                    HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                    VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
-                                    Content="{TemplateBinding Content}"
-                                    ContentTemplate="{TemplateBinding ContentTemplate}"
-                                    Foreground="{TemplateBinding Foreground}" />
+                                <Border
+                                    x:Name="RootBorder"
+                                    Background="{TemplateBinding Background}"
+                                    BorderThickness="0"
+                                    CornerRadius="{TemplateBinding CornerRadius}">
+                                    <VisualStateManager.VisualStateGroups>
+                                        <VisualStateGroup x:Name="CommonStates">
+                                            <VisualState x:Name="Normal" />
+                                            <VisualState x:Name="PointerOver">
+                                                <VisualState.Setters>
+                                                    <Setter Target="RootBorder.Background" Value="{ThemeResource ToggleButtonBackgroundPointerOver}" />
+                                                    <Setter Target="OuterRim.Background" Value="{ThemeResource ToggleButtonBorderBrushPointerOver}" />
+                                                    <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource ToggleButtonForegroundPointerOver}" />
+                                                </VisualState.Setters>
+                                            </VisualState>
+                                            <VisualState x:Name="Pressed">
+                                                <VisualState.Setters>
+                                                    <Setter Target="RootBorder.Background" Value="{ThemeResource ToggleButtonBackgroundPressed}" />
+                                                    <Setter Target="OuterRim.Background" Value="{ThemeResource ToggleButtonBorderBrushPressed}" />
+                                                    <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource ToggleButtonForegroundPressed}" />
+                                                    <Setter Target="OuterRim.Padding" Value="2,3,2,1" />
+                                                </VisualState.Setters>
+                                            </VisualState>
+                                            <VisualState x:Name="Disabled">
+                                                <VisualState.Setters>
+                                                    <Setter Target="OuterRim.Opacity" Value="0.55" />
+                                                </VisualState.Setters>
+                                            </VisualState>
+                                            <VisualState x:Name="Checked">
+                                                <VisualState.Setters>
+                                                    <Setter Target="RootBorder.Background" Value="{ThemeResource ToggleButtonBackgroundChecked}" />
+                                                    <Setter Target="OuterRim.Background" Value="{ThemeResource ToggleButtonBorderBrushChecked}" />
+                                                    <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource ToggleButtonForegroundChecked}" />
+                                                </VisualState.Setters>
+                                            </VisualState>
+                                            <VisualState x:Name="CheckedPointerOver">
+                                                <VisualState.Setters>
+                                                    <Setter Target="RootBorder.Background" Value="{ThemeResource ToggleButtonBackgroundCheckedPointerOver}" />
+                                                    <Setter Target="OuterRim.Background" Value="{ThemeResource ToggleButtonBorderBrushCheckedPointerOver}" />
+                                                    <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource ToggleButtonForegroundCheckedPointerOver}" />
+                                                </VisualState.Setters>
+                                            </VisualState>
+                                            <VisualState x:Name="CheckedPressed">
+                                                <VisualState.Setters>
+                                                    <Setter Target="RootBorder.Background" Value="{ThemeResource ToggleButtonBackgroundCheckedPressed}" />
+                                                    <Setter Target="OuterRim.Background" Value="{ThemeResource ToggleButtonBorderBrushCheckedPressed}" />
+                                                    <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource ToggleButtonForegroundCheckedPressed}" />
+                                                    <Setter Target="OuterRim.Padding" Value="2,3,2,1" />
+                                                </VisualState.Setters>
+                                            </VisualState>
+                                            <VisualState x:Name="CheckedDisabled" />
+                                            <VisualState x:Name="Indeterminate" />
+                                            <VisualState x:Name="IndeterminatePointerOver" />
+                                            <VisualState x:Name="IndeterminatePressed" />
+                                            <VisualState x:Name="IndeterminateDisabled" />
+                                        </VisualStateGroup>
+                                    </VisualStateManager.VisualStateGroups>
+                                    <ContentPresenter
+                                        x:Name="ContentPresenter"
+                                        Padding="{TemplateBinding Padding}"
+                                        HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                        VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                        Content="{TemplateBinding Content}"
+                                        ContentTemplate="{TemplateBinding ContentTemplate}"
+                                        Foreground="{TemplateBinding Foreground}" />
+                                </Border>
                             </Border>
                         </ControlTemplate>
                     </Setter.Value>
@@ -168,7 +182,7 @@
                 <Setter Property="MinHeight" Value="48" />
                 <Setter Property="MinWidth" Value="88" />
                 <Setter Property="CornerRadius" Value="0" />
-                <Setter Property="BorderBrush" Value="#FFCBD5E1" />
+                <Setter Property="BorderBrush" Value="#FF475569" />
             </Style>
 
             <Style
@@ -182,7 +196,7 @@
                 <Setter Property="MinHeight" Value="48" />
                 <Setter Property="MinWidth" Value="88" />
                 <Setter Property="CornerRadius" Value="0" />
-                <Setter Property="BorderBrush" Value="#FFCBD5E1" />
+                <Setter Property="BorderBrush" Value="#FF475569" />
             </Style>
 
             <Style x:Key="NetaListItemContainerStyle" TargetType="ListViewItem">
