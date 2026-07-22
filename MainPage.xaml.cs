@@ -36,7 +36,9 @@ public sealed partial class MainPage : Page
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         Loaded -= OnLoaded;
-        OperatorPlayer.SetMediaPlayer(ViewModel.Session.OperatorPlayer);
+        OperatorPlayerA.SetMediaPlayer(ViewModel.Session.GetOperatorPlayerForSlot(0));
+        OperatorPlayerB.SetMediaPlayer(ViewModel.Session.GetOperatorPlayerForSlot(1));
+        UpdateOperatorSlotVisibility(ViewModel.Session.VisibleSlotIndex);
         InkLayer.Attach(ViewModel.Session, inputEnabled: true);
         ViewModel.PenChanged += OnPenChanged;
         ViewModel.TimelineSliderSync += OnTimelineSliderSync;
@@ -52,6 +54,8 @@ public sealed partial class MainPage : Page
         ApplyButtonBrushes(SkipBackBtn);
         ApplyButtonBrushes(SkipForwardBtn);
         ApplyButtonBrushes(ClearInkBtn);
+        ApplyButtonBrushes(PenThicknessMinusBtn);
+        ApplyButtonBrushes(PenThicknessPlusBtn);
 
         UpdatePlayToggleLook();
         UpdateRateToggleLooks();
@@ -61,7 +65,37 @@ public sealed partial class MainPage : Page
         UpdateDemoWatermark();
         ViewModel.SetPenRed();
         OnTimelineSliderSync(ViewModel.TimelinePosition, ViewModel.TimelineMaximum);
+        SubscribeVisibleSlotUi(ViewModel.Session);
         await ViewModel.LoadSavedFolderAsync();
+        _ = ViewModel.CheckForUpdatesOnStartupAsync();
+    }
+
+    private void SubscribeVisibleSlotUi(EngineSession session)
+    {
+        session.VisibleSlotChanged += OnVisibleSlotChanged;
+    }
+
+    private void OnVisibleSlotChanged(int visibleSlotIndex)
+    {
+        var dq = App.DispatcherQueue;
+        if (dq.HasThreadAccess)
+            ApplyVisibleSlot(visibleSlotIndex);
+        else
+            dq.TryEnqueue(() => ApplyVisibleSlot(visibleSlotIndex));
+    }
+
+    private void ApplyVisibleSlot(int visibleSlotIndex)
+    {
+        var session = ViewModel.Session;
+        OperatorPlayerA.SetMediaPlayer(session.GetOperatorPlayerForSlot(0));
+        OperatorPlayerB.SetMediaPlayer(session.GetOperatorPlayerForSlot(1));
+        UpdateOperatorSlotVisibility(visibleSlotIndex);
+    }
+
+    private void UpdateOperatorSlotVisibility(int visibleSlotIndex)
+    {
+        OperatorPlayerA.Visibility = visibleSlotIndex == 0 ? Visibility.Visible : Visibility.Collapsed;
+        OperatorPlayerB.Visibility = visibleSlotIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

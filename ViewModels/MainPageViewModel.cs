@@ -2,10 +2,13 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Windows.UI;
 using Kakikomi.Helpers;
 using Kakikomi.Models;
 using Kakikomi.Services;
+using Kakikomi.Updates;
 
 namespace Kakikomi.ViewModels;
 
@@ -14,10 +17,13 @@ public partial class MainPageViewModel : ObservableObject
     private readonly EngineSession _session;
     private readonly InkAutoSave _inkAutoSave;
     private readonly DispatcherQueueTimer _timelineTimer;
+    private readonly DispatcherQueueTimer _previewSeekTimer;
     private CancellationTokenSource? _thumbnailLoadCts;
+    private CancellationTokenSource? _openNetaCts;
     private bool _isUserSeeking;
     private double _timelineDurationSeconds;
-    private DateTime _lastPreviewSeekUtc;
+    private double _pendingPreviewSeconds;
+    private bool _hasPendingPreview;
 
     public ObservableCollection<NetaItem> NetaItems { get; } = [];
 
@@ -58,6 +64,9 @@ public partial class MainPageViewModel : ObservableObject
     private bool isPenEraser;
 
     [ObservableProperty]
+    private string penThicknessLabel = "太さ 6";
+
+    [ObservableProperty]
     private bool isEditMode = true;
 
     [ObservableProperty]
@@ -71,6 +80,15 @@ public partial class MainPageViewModel : ObservableObject
 
     [ObservableProperty]
     private bool hasTimeline;
+
+    [ObservableProperty]
+    private bool updateBannerVisible;
+
+    [ObservableProperty]
+    private string updateBannerMessage = string.Empty;
+
+    public Visibility UpdateBannerVisibility =>
+        UpdateBannerVisible ? Visibility.Visible : Visibility.Collapsed;
 
     public bool IsUserSeeking => _isUserSeeking;
 
@@ -93,6 +111,12 @@ public partial class MainPageViewModel : ObservableObject
         _timelineTimer = dq.CreateTimer();
         _timelineTimer.Interval = TimeSpan.FromMilliseconds(200);
         _timelineTimer.Tick += (_, _) => RefreshTimeline();
+
+        // ドラッグ中は最新 Position だけを約60fpsで送る（Play/Pause はしない）
+        _previewSeekTimer = dq.CreateTimer();
+        _previewSeekTimer.Interval = TimeSpan.FromMilliseconds(16);
+        _previewSeekTimer.IsRepeating = true;
+        _previewSeekTimer.Tick += (_, _) => FlushPendingPreviewSeek();
     }
 
     public void BeginTimelineSeek()
@@ -101,10 +125,13 @@ public partial class MainPageViewModel : ObservableObject
             return;
 
         _isUserSeeking = true;
+        _hasPendingPreview = false;
         if (_session.IsPlaying)
             _session.Pause();
 
         _timelineTimer.Stop();
+        _session.BeginScrubPreview();
+        _previewSeekTimer.Start();
     }
 
     public void EndTimelineSeek(double seconds)
@@ -113,13 +140,35 @@ public partial class MainPageViewModel : ObservableObject
             return;
 
         _isUserSeeking = false;
-        ApplyTimelineSeek(seconds, preview: false);
+        _previewSeekTimer.Stop();
+        _hasPendingPreview = false;
+
+        if (double.IsNaN(seconds) || seconds < 0)
+            seconds = 0;
+        var duration = _timelineDurationSeconds > 0
+            ? _timelineDurationSeconds
+            : _session.TimelineDuration.TotalSeconds;
+        if (!double.IsNaN(duration) && duration > 0 && seconds > duration)
+            seconds = duration;
+
+        TimelinePosition = seconds;
+        UpdateTimelineText(seconds, duration > 0 ? duration : TimelineMaximum);
+        _session.EndScrubPreview(TimeSpan.FromSeconds(seconds));
         SyncTimelineSlider(seconds, _timelineDurationSeconds);
     }
 
     public void OnTimelineSliderChanged(double seconds)
     {
         ApplyTimelineSeek(seconds, preview: true);
+    }
+
+    private void FlushPendingPreviewSeek()
+    {
+        if (!_isUserSeeking || !_hasPendingPreview)
+            return;
+
+        _hasPendingPreview = false;
+        _session.SeekPreview(TimeSpan.FromSeconds(_pendingPreviewSeconds));
     }
 
     private void ApplyTimelineSeek(double seconds, bool preview)
@@ -143,12 +192,9 @@ public partial class MainPageViewModel : ObservableObject
 
         if (preview)
         {
-            var now = DateTime.UtcNow;
-            if ((now - _lastPreviewSeekUtc).TotalMilliseconds < 33)
-                return;
-
-            _lastPreviewSeekUtc = now;
-            _session.SeekTo(TimeSpan.FromSeconds(seconds), syncClean: false, notifyTimeline: false);
+            // ポインタ毎に Seek しない。最新値だけ保持し、16ms タイマーが送る（待ち行列を作らない）
+            _pendingPreviewSeconds = seconds;
+            _hasPendingPreview = true;
             return;
         }
 
@@ -183,12 +229,53 @@ public partial class MainPageViewModel : ObservableObject
     }
 
     [RelayCommand(CanExecute = nameof(CanUseEditControls))]
+    private async Task DeleteNetaAsync(NetaItem? item)
+    {
+        if (item is null || !IsEditMode)
+            return;
+
+        var xamlRoot = App.Window?.Content?.XamlRoot;
+        if (xamlRoot is null)
+            return;
+
+        var dialog = new ContentDialog
+        {
+            Title = "一覧から外す",
+            Content = $"「{item.DisplayName}」を一覧から外しますか？\nPC上のファイルは削除されません。",
+            PrimaryButtonText = "外す",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = xamlRoot,
+        };
+
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            return;
+
+        try
+        {
+            var wasSelected = SelectedNeta == item
+                || string.Equals(_session.CurrentPath, item.Path, StringComparison.OrdinalIgnoreCase);
+
+            if (wasSelected)
+                SelectedNeta = null;
+
+            _session.UnloadNeta(item.Path);
+            NetaItems.Remove(item);
+            StatusText = $"一覧から外しました: {item.DisplayName}（残り {NetaItems.Count} 本）";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"削除失敗: {ex.Message}";
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanUseEditControls))]
     private async Task PickFolderAsync()
     {
         string? path;
         try
         {
-            path = NativeFolderPicker.PickFolder(App.WindowHandle);
+            path = NativeFolderPicker.PickFolder(App.WindowHandle, initialPath: _session.FolderPath);
             if (string.IsNullOrWhiteSpace(path))
                 return;
         }
@@ -239,17 +326,72 @@ public partial class MainPageViewModel : ObservableObject
 
     private async Task OpenSelectedAsync(NetaItem item)
     {
+        _openNetaCts?.Cancel();
+        _openNetaCts?.Dispose();
+        _openNetaCts = new CancellationTokenSource();
+        var token = _openNetaCts.Token;
+
         try
         {
             _inkAutoSave.FlushNow();
-            await _session.OpenNetaAsync(item);
+            await _session.OpenNetaAsync(item, token);
+            if (token.IsCancellationRequested)
+                return;
+
             StatusText = $"読込: {item.DisplayName}（先頭ポーズ）";
             UpdatePlaybackLabels();
+        }
+        catch (OperationCanceledException)
+        {
+            // より新しい選択に置き換えられた
         }
         catch (Exception ex)
         {
             StatusText = $"読込失敗: {ex.Message}";
         }
+    }
+
+    public async Task CheckForUpdatesOnStartupAsync()
+    {
+        if (!PackagedAppDetector.CanApplyOnlineUpdate())
+            return;
+
+        try
+        {
+            var service = new AppUpdateService();
+            var current = AppVersionReader.GetCurrentVersion();
+            var check = await service.CheckForUpdateAsync(AppReleaseProfile.Default, current).ConfigureAwait(false);
+            if (!check.Ok || !check.Available || string.IsNullOrWhiteSpace(check.LatestVersion))
+                return;
+
+            var dq = App.DispatcherQueue;
+            if (dq is null)
+                return;
+
+            dq.TryEnqueue(() =>
+            {
+                UpdateBannerMessage = $"新しいバージョンがあります（v{check.LatestVersion}）";
+                UpdateBannerVisible = true;
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[StartupUpdateCheck] {ex}");
+        }
+    }
+
+    partial void OnUpdateBannerVisibleChanged(bool value) =>
+        OnPropertyChanged(nameof(UpdateBannerVisibility));
+
+    [RelayCommand]
+    private void DismissUpdateBanner() => UpdateBannerVisible = false;
+
+    [RelayCommand]
+    private async Task ApplyOnlineUpdateAsync()
+    {
+        await OnlineUpdateUiHelper.RunAsync(
+            App.Window?.Content?.XamlRoot,
+            message => StatusText = message).ConfigureAwait(false);
     }
 
     [RelayCommand]
@@ -305,6 +447,7 @@ public partial class MainPageViewModel : ObservableObject
     private void SelectPenRed()
     {
         SetPenSelection(red: true);
+        UpdatePenThicknessLabel();
         PenChanged?.Invoke(AppSettings.PenRed, AppSettings.PenThickness, false);
     }
 
@@ -312,6 +455,7 @@ public partial class MainPageViewModel : ObservableObject
     private void SelectPenGreen()
     {
         SetPenSelection(green: true);
+        UpdatePenThicknessLabel();
         PenChanged?.Invoke(AppSettings.PenGreen, AppSettings.PenThickness, false);
     }
 
@@ -319,6 +463,7 @@ public partial class MainPageViewModel : ObservableObject
     private void SelectPenBlue()
     {
         SetPenSelection(blue: true);
+        UpdatePenThicknessLabel();
         PenChanged?.Invoke(AppSettings.PenBlue, AppSettings.PenThickness, false);
     }
 
@@ -326,6 +471,7 @@ public partial class MainPageViewModel : ObservableObject
     private void SelectPenEraser()
     {
         SetPenSelection(eraser: true);
+        UpdatePenThicknessLabel();
         PenChanged?.Invoke(Color.FromArgb(255, 148, 163, 184), AppSettings.EraserThickness, true);
     }
 
@@ -339,6 +485,32 @@ public partial class MainPageViewModel : ObservableObject
             SelectPenBlue();
         else if (IsPenEraser)
             SelectPenEraser();
+        else
+            UpdatePenThicknessLabel();
+    }
+
+    private void UpdatePenThicknessLabel()
+    {
+        PenThicknessLabel = IsPenEraser
+            ? $"消 {AppSettings.EraserThickness:0}"
+            : $"太さ {AppSettings.PenThickness:0}";
+    }
+
+    [RelayCommand]
+    private void DecreasePenThickness() => AdjustActiveThickness(-1);
+
+    [RelayCommand]
+    private void IncreasePenThickness() => AdjustActiveThickness(1);
+
+    private void AdjustActiveThickness(double delta)
+    {
+        if (IsPenEraser)
+            AppSettings.SetEraserThickness(AppSettings.EraserThickness + delta);
+        else
+            AppSettings.SetPenThickness(AppSettings.PenThickness + delta);
+
+        UpdatePenThicknessLabel();
+        ReapplyActivePen();
     }
 
     [RelayCommand]
@@ -390,6 +562,7 @@ public partial class MainPageViewModel : ObservableObject
         PickFolderCommand.NotifyCanExecuteChanged();
         RefreshFolderCommand.NotifyCanExecuteChanged();
         OpenSettingsCommand.NotifyCanExecuteChanged();
+        DeleteNetaCommand.NotifyCanExecuteChanged();
     }
 
     [RelayCommand]
@@ -451,6 +624,7 @@ public partial class MainPageViewModel : ObservableObject
         foreach (var item in items)
             NetaItems.Add(item);
 
+        _session.ScheduleWarmAll(items.Select(i => i.Path).ToList());
         _ = LoadThumbnailsAsync(items, token);
     }
 

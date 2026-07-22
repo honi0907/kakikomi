@@ -19,8 +19,37 @@ public sealed partial class CleanOutputWindow : Window
 
     public void Attach(EngineSession session)
     {
-        PlayerElement.SetMediaPlayer(session.CleanPlayer);
+        PlayerElementA.SetMediaPlayer(session.GetCleanPlayerForSlot(0));
+        PlayerElementB.SetMediaPlayer(session.GetCleanPlayerForSlot(1));
+        UpdateCleanSlotVisibility(session.VisibleSlotIndex);
         InkLayer.Attach(session, inputEnabled: false);
+        session.VisibleSlotChanged += OnVisibleSlotChanged;
+    }
+
+    private void OnVisibleSlotChanged(int visibleSlotIndex)
+    {
+        var dq = DispatcherQueue;
+        if (dq.HasThreadAccess)
+            ApplyVisibleSlot(visibleSlotIndex);
+        else
+            dq.TryEnqueue(() => ApplyVisibleSlot(visibleSlotIndex));
+    }
+
+    private void ApplyVisibleSlot(int visibleSlotIndex)
+    {
+        var session = App.Engine;
+        if (session is null)
+            return;
+
+        PlayerElementA.SetMediaPlayer(session.GetCleanPlayerForSlot(0));
+        PlayerElementB.SetMediaPlayer(session.GetCleanPlayerForSlot(1));
+        UpdateCleanSlotVisibility(visibleSlotIndex);
+    }
+
+    private void UpdateCleanSlotVisibility(int visibleSlotIndex)
+    {
+        PlayerElementA.Visibility = visibleSlotIndex == 0 ? Visibility.Visible : Visibility.Collapsed;
+        PlayerElementB.Visibility = visibleSlotIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnAppSettingsChanged()
@@ -44,7 +73,6 @@ public sealed partial class CleanOutputWindow : Window
         var secondary = MonitorHelper.GetSecondaryMonitorBounds();
         if (secondary is null)
         {
-            // モニタ1台のときはフルスクリーンにしない（メインを潰して落ちる原因になる）
             appWindow.Resize(new Windows.Graphics.SizeInt32(1280, 720));
             Activate();
             return;

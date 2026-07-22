@@ -13,7 +13,12 @@
                 Height="1080"
                 Background="Black">
                 <MediaPlayerElement
-                    x:Name="PlayerElement"
+                    x:Name="PlayerElementA"
+                    AreTransportControlsEnabled="False"
+                    AutoPlay="False"
+                    Stretch="Uniform" />
+                <MediaPlayerElement
+                    x:Name="PlayerElementB"
                     AreTransportControlsEnabled="False"
                     AutoPlay="False"
                     Stretch="Uniform" />

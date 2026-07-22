@@ -223,7 +223,7 @@ public sealed class TimelineSeekBar : UserControl
         var trackWidth = Math.Max(ActualWidth - HorizontalPad * 2, 1);
         var x = Clamp(point.X - HorizontalPad, 0, trackWidth);
         var ratio = x / trackWidth;
-        return Math.Round(ratio * Maximum, 1);
+        return Math.Round(ratio * Maximum, 2);
     }
 
     private void UpdateVisuals()

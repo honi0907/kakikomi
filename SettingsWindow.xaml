@@ -149,49 +149,123 @@
                         Content="アプリを終了" />
                 </StackPanel>
 
-                <StackPanel x:Name="PanelPalette" Spacing="12" Visibility="Collapsed">
+                <StackPanel x:Name="PanelPalette" Spacing="16" Visibility="Collapsed">
                     <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="#FFF8FAFC" Text="パレットの色編集" />
                     <TextBlock
                         Foreground="#FF94A3B8"
-                        Text="HEX（例: #EF4444）で指定。適用で反映・保存します。" />
+                        TextWrapping="Wrap"
+                        Text="ペンを選ぶと色選択が出ます。スペクトル・HEX・RGB 数値で変更できます。" />
 
-                    <Grid ColumnSpacing="12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Ellipse x:Name="SwatchRed" Width="28" Height="28" VerticalAlignment="Center" />
-                        <TextBox x:Name="HexRed" Grid.Column="1" Header="ペン1" PlaceholderText="#EF4444" />
-                        <Button x:Name="ApplyRedBtn" Grid.Column="2" VerticalAlignment="Bottom" Content="適用" MinWidth="72" />
-                    </Grid>
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <Button
+                            x:Name="Pen1SwatchBtn"
+                            MinWidth="120"
+                            MinHeight="48"
+                            Padding="12,8"
+                            Click="OnPen1SwatchClick">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Ellipse x:Name="SwatchRed" Width="28" Height="28" />
+                                <TextBlock VerticalAlignment="Center" Text="ペン1" />
+                            </StackPanel>
+                        </Button>
+                        <Button
+                            x:Name="Pen2SwatchBtn"
+                            MinWidth="120"
+                            MinHeight="48"
+                            Padding="12,8"
+                            Click="OnPen2SwatchClick">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Ellipse x:Name="SwatchGreen" Width="28" Height="28" />
+                                <TextBlock VerticalAlignment="Center" Text="ペン2" />
+                            </StackPanel>
+                        </Button>
+                        <Button
+                            x:Name="Pen3SwatchBtn"
+                            MinWidth="120"
+                            MinHeight="48"
+                            Padding="12,8"
+                            Click="OnPen3SwatchClick">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Ellipse x:Name="SwatchBlue" Width="28" Height="28" />
+                                <TextBlock VerticalAlignment="Center" Text="ペン3" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
 
-                    <Grid ColumnSpacing="12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Ellipse x:Name="SwatchGreen" Width="28" Height="28" VerticalAlignment="Center" />
-                        <TextBox x:Name="HexGreen" Grid.Column="1" Header="ペン2" PlaceholderText="#22C55E" />
-                        <Button x:Name="ApplyGreenBtn" Grid.Column="2" VerticalAlignment="Bottom" Content="適用" MinWidth="72" />
-                    </Grid>
+                    <Border
+                        x:Name="ColorEditorPanel"
+                        Padding="12"
+                        Background="#FF0F172A"
+                        BorderBrush="#FF334155"
+                        BorderThickness="1"
+                        Visibility="Collapsed">
+                        <StackPanel Spacing="10">
+                            <Grid>
+                                <TextBlock
+                                    x:Name="ColorEditorTitle"
+                                    FontWeight="SemiBold"
+                                    Foreground="#FFE2E8F0"
+                                    Text="ペン1 の色"
+                                    VerticalAlignment="Center" />
+                                <Button
+                                    x:Name="CloseColorEditorBtn"
+                                    MinWidth="72"
+                                    MinHeight="32"
+                                    Padding="10,4"
+                                    HorizontalAlignment="Right"
+                                    Content="閉じる"
+                                    Click="OnCloseColorEditorClick" />
+                            </Grid>
 
-                    <Grid ColumnSpacing="12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Ellipse x:Name="SwatchBlue" Width="28" Height="28" VerticalAlignment="Center" />
-                        <TextBox x:Name="HexBlue" Grid.Column="1" Header="ペン3" PlaceholderText="#3B82F6" />
-                        <Button x:Name="ApplyBlueBtn" Grid.Column="2" VerticalAlignment="Bottom" Content="適用" MinWidth="72" />
-                    </Grid>
+                            <!-- RGB はスクロール不要な位置に常時表示 -->
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <NumberBox
+                                    x:Name="RgbRBox"
+                                    Header="R"
+                                    Minimum="0"
+                                    Maximum="255"
+                                    SpinButtonPlacementMode="Compact" />
+                                <NumberBox
+                                    x:Name="RgbGBox"
+                                    Grid.Column="1"
+                                    Header="G"
+                                    Minimum="0"
+                                    Maximum="255"
+                                    SpinButtonPlacementMode="Compact" />
+                                <NumberBox
+                                    x:Name="RgbBBox"
+                                    Grid.Column="2"
+                                    Header="B"
+                                    Minimum="0"
+                                    Maximum="255"
+                                    SpinButtonPlacementMode="Compact" />
+                            </Grid>
+
+                            <ColorPicker
+                                x:Name="ActiveColorPicker"
+                                ColorSpectrumShape="Box"
+                                IsColorChannelTextInputVisible="False"
+                                IsHexInputVisible="True"
+                                IsAlphaEnabled="False"
+                                IsAlphaSliderVisible="False"
+                                IsAlphaTextInputVisible="False"
+                                MaxWidth="320"
+                                MaxHeight="280" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <StackPanel x:Name="PanelPenSize" Spacing="16" Visibility="Collapsed">
                     <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="#FFF8FAFC" Text="ペンサイズ" />
-                    <TextBlock Foreground="#FF94A3B8" Text="描画ペンと消しゴムの太さを変更します。" />
+                    <TextBlock
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
+                        Text="描画ペンと消しゴムの太さを変更します。操作画面にも現在の太さが表示されます。" />
                     <NumberBox
                         x:Name="PenSizeBox"
                         Header="ペン太さ"

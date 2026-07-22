@@ -8,11 +8,12 @@ using Kakikomi.Models;
 namespace Kakikomi.Services;
 
 /// <summary>
-/// ネタ一覧用の動画サムネイル読み込み。
+/// ネタ一覧用の動画サムネイル・フレームレート読み込み。
 /// </summary>
 public static class VideoThumbnailLoader
 {
     private const uint ThumbnailDecodeSize = 240;
+    private const string FrameRateProperty = "System.Video.FrameRate";
 
     public static async Task LoadAsync(IReadOnlyList<NetaItem> items, CancellationToken cancellationToken = default)
     {
@@ -26,9 +27,11 @@ public static class VideoThumbnailLoader
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var stream = await TryOpenThumbnailStreamAsync(item.Path, cancellationToken).ConfigureAwait(false);
-                if (stream is null)
-                    return;
+                var file = await StorageFile.GetFileFromPathAsync(item.Path);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var frameLabel = await TryReadFrameRateLabelAsync(file, cancellationToken).ConfigureAwait(false);
+                var stream = await TryOpenThumbnailStreamAsync(file, cancellationToken).ConfigureAwait(false);
 
                 var dq = App.DispatcherQueue;
                 var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -36,9 +39,16 @@ public static class VideoThumbnailLoader
                     {
                         try
                         {
-                            var bmp = new BitmapImage();
-                            await bmp.SetSourceAsync(stream);
-                            item.Thumbnail = bmp;
+                            if (!string.IsNullOrEmpty(frameLabel))
+                                item.FrameRateLabel = frameLabel;
+
+                            if (stream is not null)
+                            {
+                                var bmp = new BitmapImage();
+                                await bmp.SetSourceAsync(stream);
+                                item.Thumbnail = bmp;
+                            }
+
                             tcs.TrySetResult();
                         }
                         catch (Exception ex)
@@ -47,11 +57,11 @@ public static class VideoThumbnailLoader
                         }
                         finally
                         {
-                            stream.Dispose();
+                            stream?.Dispose();
                         }
                     }))
                 {
-                    stream.Dispose();
+                    stream?.Dispose();
                     tcs.TrySetCanceled();
                 }
 
@@ -81,13 +91,60 @@ public static class VideoThumbnailLoader
         }
     }
 
-    private static async Task<IRandomAccessStream?> TryOpenThumbnailStreamAsync(
-        string path,
+    private static async Task<string?> TryReadFrameRateLabelAsync(
+        StorageFile file,
         CancellationToken cancellationToken)
     {
         try
         {
-            var file = await StorageFile.GetFileFromPathAsync(path);
+            var props = await file.Properties.RetrievePropertiesAsync([FrameRateProperty]);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!props.TryGetValue(FrameRateProperty, out var raw) || raw is null)
+                return null;
+
+            // System.Video.FrameRate は fps × 1000 の UInt32（例: 29970 → 29.97）
+            double fpsTimes1000 = raw switch
+            {
+                uint u => u,
+                int i => i,
+                ulong ul => ul,
+                long l => l,
+                double d => d,
+                float f => f,
+                _ => 0
+            };
+
+            if (fpsTimes1000 <= 0)
+                return null;
+
+            var fps = fpsTimes1000 / 1000.0;
+            if (fps < 1 || fps > 240)
+                return null;
+
+            return FormatFps(fps);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FrameRate] {ex.Message}");
+            return null;
+        }
+    }
+
+    private static string FormatFps(double fps)
+    {
+        var nearest = Math.Round(fps);
+        if (Math.Abs(fps - nearest) < 0.05)
+            return $"{(int)nearest}fps";
+
+        return $"{fps:0.##}fps";
+    }
+
+    private static async Task<IRandomAccessStream?> TryOpenThumbnailStreamAsync(
+        StorageFile file,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
             cancellationToken.ThrowIfCancellationRequested();
             var thumb = await file.GetThumbnailAsync(
                 ThumbnailMode.VideosView,
@@ -103,7 +160,7 @@ public static class VideoThumbnailLoader
 
         try
         {
-            return await TryOpenViaMediaCompositionAsync(path, cancellationToken).ConfigureAwait(false);
+            return await TryOpenViaMediaCompositionAsync(file, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -113,10 +170,9 @@ public static class VideoThumbnailLoader
     }
 
     private static async Task<IRandomAccessStream?> TryOpenViaMediaCompositionAsync(
-        string path,
+        StorageFile file,
         CancellationToken cancellationToken)
     {
-        var file = await StorageFile.GetFileFromPathAsync(path);
         cancellationToken.ThrowIfCancellationRequested();
         var clip = await MediaClip.CreateFromFileAsync(file);
         var composition = new MediaComposition();

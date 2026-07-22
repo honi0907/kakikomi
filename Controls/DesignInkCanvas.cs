@@ -18,7 +18,6 @@ public sealed class DesignInkCanvas : Canvas
     private bool _isEraser;
     private bool _drawing;
     private uint? _activePointerId;
-    private const double EraserRadius = 28;
 
     public DesignInkCanvas()
     {
@@ -96,7 +95,7 @@ public sealed class DesignInkCanvas : Canvas
         CapturePointer(e.Pointer);
         var point = Clamp(e.GetCurrentPoint(this).Position);
         if (_isEraser)
-            _session.EraseNear(point, EraserRadius);
+            _session.EraseNear(point, _thickness);
         else
             _session.BeginStroke(_color, _thickness, point);
         e.Handled = true;
@@ -111,7 +110,7 @@ public sealed class DesignInkCanvas : Canvas
 
         var point = Clamp(e.GetCurrentPoint(this).Position);
         if (_isEraser)
-            _session.EraseNear(point, EraserRadius);
+            _session.EraseNear(point, _thickness);
         else
             _session.AppendStrokePoint(point);
         e.Handled = true;
