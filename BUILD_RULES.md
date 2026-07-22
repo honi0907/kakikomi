@@ -22,6 +22,7 @@ Stop-Process -Name Kakikomi -Force -ErrorAction SilentlyContinue
 - アンパッケージ（`WindowsPackageType=None`）。`winapp` 不要。
 - リリースのたびにポータブル ZIP も生成する。
 - `dist` に古い `*-portable.zip` は残さない（スクリプトが削除）。
+- `.mov` 変換用に `scripts\Ensure-Ffmpeg.ps1` で `ffmpeg.exe` を取得し、`dist\Kakikomi\ffmpeg\ffmpeg.exe` へ同梱する。
 
 ## リリース（Setup + ポータブル ZIP）
 
@@ -75,7 +76,7 @@ GitHub Release まで出す場合（`origin` + `gh` 必須）:
 - `Kakikomi.csproj` の `<Version>` / `<AssemblyVersion>` / `<FileVersion>` を揃える。
 - パッチは **0〜9**（例: `1.0.0` … `1.0.9`）。**`1.0.9` の次は `1.1.0`**（`1.0.10` にはしない）。
 - リリースのたびに必ず上げ、同じ tag / ファイル名の再利用はしない。
-- 現状: **1.0.8**
+- 現状: **1.0.9**
 
 ## オンライン更新（アプリ内）
 

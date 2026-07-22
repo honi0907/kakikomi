@@ -53,6 +53,14 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
 $exe = Join-Path $publish "Kakikomi.exe"
 if (-not (Test-Path $exe)) { throw "Missing exe: $exe" }
 
+# .mov → mp4 変換用 ffmpeg（元 mov は残す）
+& (Join-Path $root "scripts\Ensure-Ffmpeg.ps1") -Root $root
+$ffmpegSrc = Join-Path $root "third_party\ffmpeg\ffmpeg.exe"
+if (-not (Test-Path $ffmpegSrc)) { throw "Missing ffmpeg: $ffmpegSrc" }
+$ffmpegOut = Join-Path $publish "ffmpeg"
+New-Item -ItemType Directory -Force -Path $ffmpegOut | Out-Null
+Copy-Item -Path $ffmpegSrc -Destination (Join-Path $ffmpegOut "ffmpeg.exe") -Force
+
 # 書き込み PNG 用フォルダ（設定からも参照）
 New-Item -ItemType Directory -Force -Path (Join-Path $publish "save") | Out-Null
 

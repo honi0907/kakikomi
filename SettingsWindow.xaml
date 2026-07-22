@@ -33,6 +33,9 @@
                 <ListViewItem Tag="Demo" Content="DEMOモード" />
                 <ListViewItem Tag="Clean" Content="クリーン出力" />
                 <ListViewItem Tag="Save" Content="保存" />
+                <ListViewItem Tag="Convert" Content=".mov 変換" />
+                <ListViewItem Tag="NetaList" Content="ネタ一覧" />
+                <ListViewItem Tag="Playback" Content="再生" />
                 <ListViewItem Tag="Palette" Content="パレットの色編集" />
                 <ListViewItem Tag="PenSize" Content="ペンサイズ" />
                 <ListViewItem Tag="FullSize" Content="コンパネ起動サイズ" />
@@ -134,6 +137,86 @@
                         MinWidth="220"
                         MinHeight="44"
                         Content="save フォルダを開く" />
+                </StackPanel>
+
+                <StackPanel x:Name="PanelConvert" Spacing="16" Visibility="Collapsed">
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="#FFF8FAFC" Text=".mov 変換" />
+                    <TextBlock
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
+                        Text=".mov を検出したとき、再生用の H.264 mp4 へ変換します。元の .mov は削除せずそのまま残します。変換先はこのフォルダです。" />
+                    <TextBlock
+                        x:Name="ConvertFolderPathText"
+                        FontFamily="Consolas"
+                        FontSize="13"
+                        Foreground="#FFE2E8F0"
+                        IsTextSelectionEnabled="True"
+                        TextWrapping="Wrap" />
+                    <Button
+                        x:Name="OpenConvertFolderBtn"
+                        MinWidth="220"
+                        MinHeight="44"
+                        Content="変換先フォルダを開く" />
+                </StackPanel>
+
+                <StackPanel x:Name="PanelNetaList" Spacing="16" Visibility="Collapsed">
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="#FFF8FAFC" Text="ネタ一覧" />
+                    <TextBlock
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
+                        Text="操作画面と同じ一覧です。チェックして複数消去、または一斉消去できます。PC上の動画ファイルは削除されません。" />
+                    <TextBlock
+                        x:Name="NetaListCountText"
+                        Foreground="#FFE2E8F0"
+                        Text="0 本" />
+                    <ListView
+                        x:Name="NetaManageList"
+                        MinHeight="280"
+                        MaxHeight="360"
+                        SelectionMode="Multiple"
+                        IsMultiSelectCheckBoxEnabled="True">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Padding" Value="8,6" />
+                                <Setter Property="MinHeight" Value="0" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock
+                                    Foreground="#FFE2E8F0"
+                                    FontSize="14"
+                                    Text="{Binding DisplayName}"
+                                    TextWrapping="NoWrap"
+                                    TextTrimming="CharacterEllipsis" />
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                    <StackPanel Spacing="10" Orientation="Horizontal">
+                        <Button
+                            x:Name="RemoveSelectedNetaBtn"
+                            MinWidth="180"
+                            MinHeight="44"
+                            Content="選択を消去" />
+                        <Button
+                            x:Name="RemoveAllNetaBtn"
+                            MinWidth="180"
+                            MinHeight="44"
+                            Content="一斉消去" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel x:Name="PanelPlayback" Spacing="16" Visibility="Collapsed">
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="#FFF8FAFC" Text="再生" />
+                    <TextBlock
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
+                        Text="レジューム再生を ON にすると、別ネタを見て戻ったときに、前回止めた位置から続き再生します。OFF（既定）では戻るたびに先頭から始まります。" />
+                    <CheckBox
+                        x:Name="ResumePlaybackCheck"
+                        Content="レジューム再生"
+                        Foreground="#FFE2E8F0" />
                 </StackPanel>
 
                 <StackPanel x:Name="PanelExit" Spacing="16" Visibility="Collapsed">

@@ -12,6 +12,7 @@ public partial class App : Application
     public static CleanOutputWindow? CleanWindow { get; private set; }
     public static SettingsWindow? SettingsWindowInstance { get; private set; }
     public static EngineSession? Engine { get; private set; }
+    public static ViewModels.MainPageViewModel? MainViewModel { get; set; }
 
     public static DispatcherQueue DispatcherQueue { get; private set; } = null!;
 
@@ -41,7 +42,10 @@ public partial class App : Application
         Window = new MainWindow();
         Window.Closed += OnMainClosed;
         Window.Activate();
+        // Activate 直後だと overlapped 初期化と競合するため、即時＋遅延の両方で最大化を適用
         ApplyControlPanelLaunchSize();
+        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Normal, ApplyControlPanelLaunchSize);
+        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, ApplyControlPanelLaunchSize);
 
         StartMonitorWatch();
         DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, TryAutoOpenCleanForSecondary);
@@ -148,8 +152,14 @@ public partial class App : Application
 
         try
         {
-            if (Window.AppWindow.Presenter is OverlappedPresenter presenter)
-                presenter.Maximize();
+            var appWindow = Window.AppWindow;
+            if (appWindow.Presenter is not OverlappedPresenter presenter)
+            {
+                appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+                presenter = (OverlappedPresenter)appWindow.Presenter;
+            }
+
+            presenter.Maximize();
         }
         catch (Exception ex)
         {

@@ -20,6 +20,7 @@ public partial class MainPageViewModel : ObservableObject
     private readonly DispatcherQueueTimer _previewSeekTimer;
     private CancellationTokenSource? _thumbnailLoadCts;
     private CancellationTokenSource? _openNetaCts;
+    private CancellationTokenSource? _movConvertCts;
     private bool _isUserSeeking;
     private double _timelineDurationSeconds;
     private double _pendingPreviewSeconds;
@@ -90,6 +91,9 @@ public partial class MainPageViewModel : ObservableObject
     public Visibility UpdateBannerVisibility =>
         UpdateBannerVisible ? Visibility.Visible : Visibility.Collapsed;
 
+    public Visibility EditModeVisibility =>
+        IsEditMode ? Visibility.Visible : Visibility.Collapsed;
+
     public bool IsUserSeeking => _isUserSeeking;
 
     public event Action<double, double>? TimelineSliderSync;
@@ -109,7 +113,8 @@ public partial class MainPageViewModel : ObservableObject
         _inkAutoSave = new InkAutoSave(session, dq);
 
         _timelineTimer = dq.CreateTimer();
-        _timelineTimer.Interval = TimeSpan.FromMilliseconds(200);
+        // 再生中シークバーの見た目更新。100ms だと親指が段飛びして「かかか」見えるため ~60fps
+        _timelineTimer.Interval = TimeSpan.FromMilliseconds(16);
         _timelineTimer.Tick += (_, _) => RefreshTimeline();
 
         // ドラッグ中は最新 Position だけを約60fpsで送る（Play/Pause はしない）
@@ -221,6 +226,7 @@ public partial class MainPageViewModel : ObservableObject
 
             ReplaceNetaList(items);
             StatusText = $"フォルダ読込: {NetaItems.Count} 本";
+            await OfferMovConvertAsync(items);
         }
         catch
         {
@@ -269,6 +275,44 @@ public partial class MainPageViewModel : ObservableObject
         }
     }
 
+    /// <summary>設定画面などから一覧のみ外す（ファイルは削除しない）。</summary>
+    public int RemoveNetaItems(IEnumerable<NetaItem> items)
+    {
+        var targets = items
+            .Where(i => i is not null)
+            .Distinct()
+            .ToList();
+        if (targets.Count == 0)
+            return 0;
+
+        var removed = 0;
+        foreach (var item in targets)
+        {
+            try
+            {
+                var wasSelected = SelectedNeta == item
+                    || string.Equals(_session.CurrentPath, item.Path, StringComparison.OrdinalIgnoreCase);
+                if (wasSelected)
+                    SelectedNeta = null;
+
+                _session.UnloadNeta(item.Path);
+                if (NetaItems.Remove(item))
+                    removed++;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RemoveNeta] {item.Path}: {ex.Message}");
+            }
+        }
+
+        if (removed > 0)
+            StatusText = $"一覧から外しました: {removed} 本（残り {NetaItems.Count} 本）";
+
+        return removed;
+    }
+
+    public int ClearAllNetaItems() => RemoveNetaItems(NetaItems.ToList());
+
     [RelayCommand(CanExecute = nameof(CanUseEditControls))]
     private async Task PickFolderAsync()
     {
@@ -295,6 +339,7 @@ public partial class MainPageViewModel : ObservableObject
             StatusText = items.Count == 0
                 ? $"{name}（動画なし。mp4/mov/mkv/wmv を入れて再選択）"
                 : $"{name}（{NetaItems.Count} 本）";
+            await OfferMovConvertAsync(items);
         }
         catch (Exception ex)
         {
@@ -314,6 +359,7 @@ public partial class MainPageViewModel : ObservableObject
 
         ReplaceNetaList(items);
         StatusText = $"更新: {NetaItems.Count} 本";
+        await OfferMovConvertAsync(items);
     }
 
     partial void OnSelectedNetaChanged(NetaItem? value)
@@ -334,6 +380,17 @@ public partial class MainPageViewModel : ObservableObject
         try
         {
             _inkAutoSave.FlushNow();
+
+            if (MovTranscodeService.NeedsConvert(item.Path))
+            {
+                var converted = await OfferSingleMovConvertAsync(item.Path);
+                if (!converted)
+                {
+                    StatusText = $"読込失敗: {item.DisplayName}（.mov は変換が必要です）";
+                    return;
+                }
+            }
+
             await _session.OpenNetaAsync(item, token);
             if (token.IsCancellationRequested)
                 return;
@@ -559,6 +616,7 @@ public partial class MainPageViewModel : ObservableObject
 
     partial void OnIsEditModeChanged(bool value)
     {
+        OnPropertyChanged(nameof(EditModeVisibility));
         PickFolderCommand.NotifyCanExecuteChanged();
         RefreshFolderCommand.NotifyCanExecuteChanged();
         OpenSettingsCommand.NotifyCanExecuteChanged();
@@ -622,10 +680,215 @@ public partial class MainPageViewModel : ObservableObject
 
         NetaItems.Clear();
         foreach (var item in items)
+        {
+            item.RefreshConvertState();
             NetaItems.Add(item);
+        }
 
-        _session.ScheduleWarmAll(items.Select(i => i.Path).ToList());
+        // 変換後にウォームし直す（OfferMovConvertAsync 側）。未変換のまま先に温めると黒画面になる
         _ = LoadThumbnailsAsync(items, token);
+    }
+
+    private void SetItemConvertState(string path, NetaConvertState state)
+    {
+        void Apply()
+        {
+            foreach (var item in NetaItems)
+            {
+                if (string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    item.ConvertState = state;
+                    break;
+                }
+            }
+        }
+
+        var dq = App.DispatcherQueue;
+        if (dq is null || dq.HasThreadAccess)
+            Apply();
+        else
+            dq.TryEnqueue(Apply);
+    }
+
+    private DateTime _lastConvertProgressUiUtc;
+
+    private void SetItemConvertProgress(string path, double progress)
+    {
+        // UI 更新を間引き（ffmpeg の行が多すぎる）
+        var now = DateTime.UtcNow;
+        var forced = progress <= 0.001 || progress >= 0.999;
+        if (!forced && (now - _lastConvertProgressUiUtc).TotalMilliseconds < 50)
+            return;
+        _lastConvertProgressUiUtc = now;
+
+        void Apply()
+        {
+            foreach (var item in NetaItems)
+            {
+                if (string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    item.ConvertProgress = Math.Clamp(progress, 0, 1);
+                    break;
+                }
+            }
+        }
+
+        var dq = App.DispatcherQueue;
+        if (dq is null || dq.HasThreadAccess)
+            Apply();
+        else
+            dq.TryEnqueue(Apply);
+    }
+
+    private async Task OfferMovConvertAsync(IReadOnlyList<NetaItem> items)
+    {
+        var pending = MovTranscodeService.GetPendingMovPaths(items.Select(i => i.Path));
+        if (pending.Count == 0)
+        {
+            _session.ScheduleWarmAll(items.Select(i => i.Path).ToList());
+            return;
+        }
+
+        if (MovTranscodeService.FindFfmpegPath() is null)
+        {
+            StatusText = $".mov が {pending.Count} 本ありますが、ffmpeg が無いため変換できません";
+            _session.ScheduleWarmAll(items.Select(i => i.Path).ToList());
+            return;
+        }
+
+        var xamlRoot = App.Window?.Content?.XamlRoot;
+        if (xamlRoot is null)
+        {
+            _session.ScheduleWarmAll(items.Select(i => i.Path).ToList());
+            return;
+        }
+
+        var dialog = new ContentDialog
+        {
+            Title = ".mov を検出しました",
+            Content =
+                $".mov が {pending.Count} 本あります。\n" +
+                "再生用に H.264 の mp4 へ変換しますか？\n\n" +
+                "・元の .mov は削除しません\n" +
+                "・変換ファイルはアプリのキャッシュに保存します",
+            PrimaryButtonText = "変換する",
+            CloseButtonText = "あとで",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = xamlRoot,
+        };
+
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            StatusText = $".mov 変換をスキップ（{pending.Count} 本）。開くときに再度案内します";
+            _session.ScheduleWarmAll(items.Select(i => i.Path).ToList());
+            return;
+        }
+
+        await RunMovConvertAsync(pending);
+        _session.ScheduleWarmAll(items.Select(i => i.Path).ToList());
+    }
+
+    private async Task<bool> OfferSingleMovConvertAsync(string path)
+    {
+        if (!MovTranscodeService.NeedsConvert(path))
+            return true;
+
+        if (MovTranscodeService.FindFfmpegPath() is null)
+        {
+            StatusText = "ffmpeg が無いため .mov を変換できません";
+            return false;
+        }
+
+        var xamlRoot = App.Window?.Content?.XamlRoot;
+        if (xamlRoot is null)
+            return false;
+
+        var dialog = new ContentDialog
+        {
+            Title = ".mov の変換",
+            Content =
+                $"「{Path.GetFileName(path)}」を再生用 mp4 に変換しますか？\n\n" +
+                "元の .mov は残します。",
+            PrimaryButtonText = "変換する",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = xamlRoot,
+        };
+
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            return false;
+
+        await RunMovConvertAsync([path]);
+        return !MovTranscodeService.NeedsConvert(path);
+    }
+
+    private async Task RunMovConvertAsync(IReadOnlyList<string> paths)
+    {
+        _movConvertCts?.Cancel();
+        _movConvertCts?.Dispose();
+        _movConvertCts = new CancellationTokenSource();
+        var token = _movConvertCts.Token;
+
+        var pending = MovTranscodeService.GetPendingMovPaths(paths);
+        var failCount = 0;
+
+        try
+        {
+            for (var i = 0; i < pending.Count; i++)
+            {
+                token.ThrowIfCancellationRequested();
+                var path = pending[i];
+                SetItemConvertState(path, NetaConvertState.Converting);
+                StatusText = $"変換中 {i + 1}/{pending.Count}: {Path.GetFileName(path)}";
+
+                try
+                {
+                    await MovTranscodeService.ConvertAsync(
+                        path,
+                        status =>
+                        {
+                            var dq = App.DispatcherQueue;
+                            if (dq is null)
+                                return;
+                            if (dq.HasThreadAccess)
+                                StatusText = status;
+                            else
+                                dq.TryEnqueue(() => StatusText = status);
+                        },
+                        progress => SetItemConvertProgress(path, progress),
+                        token).ConfigureAwait(true);
+
+                    SetItemConvertProgress(path, 1);
+                    SetItemConvertState(path, NetaConvertState.Ready);
+                }
+                catch (OperationCanceledException)
+                {
+                    SetItemConvertState(path, NetaConvertState.NeedsConvert);
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    failCount++;
+                    SetItemConvertState(path, NetaConvertState.Failed);
+                    StatusText = $"変換失敗 {i + 1}/{pending.Count}: {Path.GetFileName(path)} ({ex.Message})";
+                }
+            }
+
+            if (!token.IsCancellationRequested)
+            {
+                StatusText = failCount > 0
+                    ? $"変換完了（失敗 {failCount}/{pending.Count}）。元の .mov はそのまま残しています"
+                    : $"変換完了（{pending.Count} 本）。元の .mov はそのまま残しています";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = "変換をキャンセルしました";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"変換失敗: {ex.Message}";
+        }
     }
 
     private static async Task LoadThumbnailsAsync(IReadOnlyList<NetaItem> items, CancellationToken token)

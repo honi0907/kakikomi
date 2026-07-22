@@ -238,6 +238,9 @@ public sealed class EngineSession : IDisposable
                     return;
                 }
 
+                if (!AppSettings.ResumePlayback)
+                    ResetPairToStart(warmed);
+
                 ReleaseDisplayPair(standbySlot);
                 _displayPairs[standbySlot] = warmed;
                 WireDurationChanged(warmed);
@@ -256,12 +259,26 @@ public sealed class EngineSession : IDisposable
             IsPlaying = false;
             CurrentPath = item.Path;
             _visibleSlotIndex = standbySlot;
+            if (!AppSettings.ResumePlayback)
+            {
+                var visible = _displayPairs[_visibleSlotIndex];
+                ResetPairToStart(visible);
+                ForcePausedFrameRefresh(visible.Operator, ClockRate);
+                ForcePausedFrameRefresh(visible.Clean, ClockRate);
+            }
+
             ApplyMutePolicy();
 
             if (!string.IsNullOrEmpty(oldVisiblePair.Path))
+            {
+                if (!AppSettings.ResumePlayback)
+                    ResetPairToStart(oldVisiblePair);
                 _warmCache.Put(oldVisiblePair.Path, oldVisiblePair);
+            }
             else
+            {
                 oldVisiblePair.Dispose();
+            }
 
             _displayPairs[oldVisibleSlot] = new MediaPlayerPair();
             WireDurationChanged(_displayPairs[oldVisibleSlot]);
@@ -324,11 +341,11 @@ public sealed class EngineSession : IDisposable
             return;
 
         ClearStrokes();
+        IsPlaying = true;
         ApplyMutePolicy();
         SyncPositionFromOperator();
         OperatorPlayer.Play();
         CleanPlayer.Play();
-        IsPlaying = true;
         PlaybackStateChanged?.Invoke();
     }
 
@@ -338,6 +355,7 @@ public sealed class EngineSession : IDisposable
         CleanPlayer.Pause();
         SyncPositionFromOperator();
         IsPlaying = false;
+        ApplyMutePolicy();
         PlaybackStateChanged?.Invoke();
     }
 
@@ -385,8 +403,7 @@ public sealed class EngineSession : IDisposable
 
         try
         {
-            OperatorPlayer.IsMuted = true;
-            OperatorPlayer.Volume = 0;
+            MuteBothPlayers();
             // Rate=0 で時間を止めつつ Playing にする（Position 変更でコマが出る）
             try
             {
@@ -398,6 +415,7 @@ public sealed class EngineSession : IDisposable
             }
 
             OperatorPlayer.Play();
+            MuteBothPlayers();
         }
         catch
         {
@@ -424,14 +442,19 @@ public sealed class EngineSession : IDisposable
 
         try
         {
+            MuteBothPlayers();
             OperatorPlayer.Pause();
             OperatorPlayer.PlaybackSession.PlaybackRate = _scrubSavedRate;
             OperatorPlayer.PlaybackSession.Position = finalPosition;
             CleanPlayer.PlaybackSession.PlaybackRate = _scrubSavedRate;
             CleanPlayer.PlaybackSession.Position = finalPosition;
             CleanPlayer.Pause();
-            ForcePausedFrameRefresh(OperatorPlayer);
-            ForcePausedFrameRefresh(CleanPlayer);
+            MuteBothPlayers();
+            // 離した瞬間の一瞬 Play は音漏れしやすいので使わない。
+            // Operator はドラッグ中 Rate=0 再生で既に当該コマが出ている。
+            // Clean は無音の Rate=0 フラッシュのみ。
+            ForcePausedFrameRefresh(CleanPlayer, restoreRate: _scrubSavedRate);
+            MuteBothPlayers();
         }
         catch
         {
@@ -456,7 +479,24 @@ public sealed class EngineSession : IDisposable
         if (duration > TimeSpan.Zero && position > duration)
             position = duration;
 
+        MuteBothPlayers();
         OperatorPlayer.PlaybackSession.Position = position;
+        MuteBothPlayers();
+    }
+
+    private void MuteBothPlayers()
+    {
+        try
+        {
+            OperatorPlayer.IsMuted = true;
+            OperatorPlayer.Volume = 0;
+            CleanPlayer.IsMuted = true;
+            CleanPlayer.Volume = 0;
+        }
+        catch
+        {
+            // ignore
+        }
     }
 
     public void SeekTo(
@@ -486,11 +526,11 @@ public sealed class EngineSession : IDisposable
         {
             CleanPlayer.PlaybackSession.Position = position;
             if (!IsPlaying)
-                ForcePausedFrameRefresh(OperatorPlayer);
+                ForcePausedFrameRefresh(OperatorPlayer, ClockRate);
         }
         else if (refreshOperatorFrame && !IsPlaying)
         {
-            ForcePausedFrameRefresh(OperatorPlayer);
+            ForcePausedFrameRefresh(OperatorPlayer, ClockRate);
         }
 
         ApplyMutePolicy();
@@ -568,9 +608,35 @@ public sealed class EngineSession : IDisposable
     {
         var pair = _displayPairs[slotIndex];
         if (!string.IsNullOrEmpty(pair.Path))
+        {
+            if (!AppSettings.ResumePlayback)
+                ResetPairToStart(pair);
             _warmCache.Put(pair.Path, pair);
+        }
         else
+        {
             pair.Dispose();
+        }
+    }
+
+    /// <summary>ウォーム再利用時に先頭へ戻す（レジューム OFF）。</summary>
+    private static void ResetPairToStart(MediaPlayerPair pair)
+    {
+        try
+        {
+            pair.Operator.Pause();
+            pair.Clean.Pause();
+            pair.Operator.IsMuted = true;
+            pair.Operator.Volume = 0;
+            pair.Clean.IsMuted = true;
+            pair.Clean.Volume = 0;
+            pair.Operator.PlaybackSession.Position = TimeSpan.Zero;
+            pair.Clean.PlaybackSession.Position = TimeSpan.Zero;
+        }
+        catch
+        {
+            // ignore
+        }
     }
 
     private static async Task PreparePairAtStartAsync(
@@ -580,15 +646,26 @@ public sealed class EngineSession : IDisposable
     {
         pair.ClearSource();
 
-        var uri = new Uri(path, UriKind.Absolute);
-        pair.Operator.Source = MediaSource.CreateFromUri(uri);
-        pair.Clean.Source = MediaSource.CreateFromUri(uri);
+        // ローカルファイルは URI より StorageFile の方が安定（パス文字・権限・コンテナ判定）
+        // .mov は変換済み mp4（キャッシュ）があればそちらを再生。元 .mov は残す。
+        var playbackPath = MovTranscodeService.ResolvePlaybackPath(path);
+        var file = await StorageFile.GetFileFromPathAsync(playbackPath);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        using var opFail = AttachMediaFailed(pair.Operator, out var opError);
+        using var cleanFail = AttachMediaFailed(pair.Clean, out var cleanError);
+
+        pair.Operator.Source = MediaSource.CreateFromStorageFile(file);
+        pair.Clean.Source = MediaSource.CreateFromStorageFile(file);
         pair.Path = path;
 
         await WaitForOpenedAsync(pair.Operator, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         await WaitForOpenedAsync(pair.Clean, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
+
+        ThrowIfMediaUnusable(pair.Operator, playbackPath, opError.Error);
+        ThrowIfMediaUnusable(pair.Clean, playbackPath, cleanError.Error);
 
         pair.Operator.Pause();
         pair.Clean.Pause();
@@ -601,6 +678,52 @@ public sealed class EngineSession : IDisposable
 
         await PrimeFirstFrameAsync(pair.Operator, cancellationToken).ConfigureAwait(false);
         await PrimeFirstFrameAsync(pair.Clean, cancellationToken).ConfigureAwait(false);
+    }
+
+    private sealed class MediaFailBox
+    {
+        public string? Error;
+    }
+
+    private static IDisposable AttachMediaFailed(MediaPlayer player, out MediaFailBox box)
+    {
+        box = new MediaFailBox();
+        var captured = box;
+        TypedEventHandler<MediaPlayer, MediaPlayerFailedEventArgs> handler = (_, args) =>
+        {
+            captured.Error = string.IsNullOrWhiteSpace(args.ErrorMessage)
+                ? args.Error.ToString()
+                : args.ErrorMessage;
+        };
+        player.MediaFailed += handler;
+        return new ActionDisposable(() => player.MediaFailed -= handler);
+    }
+
+    private static void ThrowIfMediaUnusable(MediaPlayer player, string path, string? mediaError)
+    {
+        if (!string.IsNullOrWhiteSpace(mediaError))
+        {
+            throw new InvalidOperationException(
+                BuildUnsupportedMediaMessage(path, mediaError));
+        }
+
+        // サムネ（シェル）は出ても、MF がデコードできないと duration が 0 のまま黒画面になる
+        if (player.PlaybackSession.NaturalDuration <= TimeSpan.Zero)
+        {
+            throw new InvalidOperationException(
+                BuildUnsupportedMediaMessage(path, "デコーダーが動画を開けませんでした"));
+        }
+    }
+
+    private static string BuildUnsupportedMediaMessage(string path, string detail)
+    {
+        var ext = Path.GetExtension(path);
+        return $"再生できません ({ext}): {detail}。サムネだけ出る場合があります。H.264 の mp4 へ変換してください。";
+    }
+
+    private sealed class ActionDisposable(Action dispose) : IDisposable
+    {
+        public void Dispose() => dispose();
     }
 
     private static async Task PrimeFirstFrameAsync(MediaPlayer player, CancellationToken cancellationToken)
@@ -620,15 +743,30 @@ public sealed class EngineSession : IDisposable
         }
     }
 
-    private static void ForcePausedFrameRefresh(MediaPlayer player)
+    private static void ForcePausedFrameRefresh(MediaPlayer player, double restoreRate = 1.0)
     {
         try
         {
-            // ポーズ中コマ更新用の一瞬 Play。音は絶対に出さない
+            // ポーズ中コマ更新。通常速度の一瞬 Play はクリック音が漏れやすいので Rate=0。
             player.IsMuted = true;
             player.Volume = 0;
+            var session = player.PlaybackSession;
+            try
+            {
+                session.PlaybackRate = 0;
+            }
+            catch
+            {
+                session.PlaybackRate = 0.01;
+            }
+
             player.Play();
+            player.IsMuted = true;
+            player.Volume = 0;
             player.Pause();
+            session.PlaybackRate = restoreRate <= 0 ? 1.0 : restoreRate;
+            player.IsMuted = true;
+            player.Volume = 0;
         }
         catch
         {
@@ -643,13 +781,15 @@ public sealed class EngineSession : IDisposable
 
     private void ApplyMutePolicy()
     {
-        var muted = Math.Abs(ClockRate - 1.0) > 0.001;
+        // 停止中・スクラブ中は Clean もミュート。離した直後の unmute がクリック音の主因。
+        var rateMute = Math.Abs(ClockRate - 1.0) > 0.001;
+        var muteClean = rateMute || !IsPlaying || _scrubPreviewActive;
         foreach (var pair in _displayPairs)
         {
             pair.Operator.IsMuted = true;
             pair.Operator.Volume = 0;
-            pair.Clean.IsMuted = muted;
-            pair.Clean.Volume = muted ? 0 : 1.0;
+            pair.Clean.IsMuted = muteClean;
+            pair.Clean.Volume = muteClean ? 0 : 1.0;
         }
     }
 

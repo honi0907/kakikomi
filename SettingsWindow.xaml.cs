@@ -3,8 +3,10 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using Windows.UI;
+using Kakikomi.Models;
 using Kakikomi.Services;
 using Kakikomi.Updates;
+using Kakikomi.ViewModels;
 
 namespace Kakikomi;
 
@@ -74,6 +76,21 @@ public sealed partial class SettingsWindow : Window
             }
         };
 
+        OpenConvertFolderBtn.Click += (_, _) =>
+        {
+            try
+            {
+                MovTranscodeService.OpenCacheInExplorer();
+            }
+            catch (Exception ex)
+            {
+                ConvertFolderPathText.Text = $"フォルダを開けません: {ex.Message}";
+            }
+        };
+
+        RemoveSelectedNetaBtn.Click += async (_, _) => await RemoveSelectedNetaAsync();
+        RemoveAllNetaBtn.Click += async (_, _) => await RemoveAllNetaAsync();
+
         ActiveColorPicker.ColorChanged += OnActiveColorChanged;
         RgbRBox.ValueChanged += OnRgbBoxChanged;
         RgbGBox.ValueChanged += OnRgbBoxChanged;
@@ -93,17 +110,23 @@ public sealed partial class SettingsWindow : Window
             AppSettings.SetEraserThickness(args.NewValue);
         };
 
-        FullSizeNextLaunchCheck.Checked += (_, _) =>
+        // Checked/Unchecked はウィンドウ閉鎖時にも発火し、false で上書きすることがあるため Click のみ保存する
+        FullSizeNextLaunchCheck.Click += (_, _) =>
         {
             if (_loadingUi)
                 return;
-            AppSettings.SetLaunchControlPanelFullSize(true);
+            AppSettings.SetLaunchControlPanelFullSize(FullSizeNextLaunchCheck.IsChecked == true);
         };
-        FullSizeNextLaunchCheck.Unchecked += (_, _) =>
+        ResumePlaybackCheck.Click += (_, _) =>
         {
             if (_loadingUi)
                 return;
-            AppSettings.SetLaunchControlPanelFullSize(false);
+            AppSettings.SetResumePlayback(ResumePlaybackCheck.IsChecked == true);
+        };
+        Closed += (_, _) =>
+        {
+            _loadingUi = true;
+            DetachNetaListEvents();
         };
 
         FullScreenNowBtn.Click += (_, _) => App.EnterControlPanelFullScreen();
@@ -155,6 +178,9 @@ public sealed partial class SettingsWindow : Window
         StyleActionButton(OpenCleanBtn);
         StyleActionButton(ExitAppBtn);
         StyleActionButton(OpenSaveFolderBtn);
+        StyleActionButton(OpenConvertFolderBtn);
+        StyleActionButton(RemoveSelectedNetaBtn);
+        StyleActionButton(RemoveAllNetaBtn);
         StyleActionButton(DemoUnlockBtn);
         StyleActionButton(DemoEnableBtn);
         StyleActionButton(OnlineUpdateBtn);
@@ -163,6 +189,121 @@ public sealed partial class SettingsWindow : Window
         StyleActionButton(Pen2SwatchBtn);
         StyleActionButton(Pen3SwatchBtn);
         StyleActionButton(CloseColorEditorBtn);
+    }
+
+    private void DetachNetaListEvents()
+    {
+        var vm = App.MainViewModel;
+        if (vm is not null)
+            vm.NetaItems.CollectionChanged -= OnNetaItemsCollectionChanged;
+    }
+
+    private void BindNetaManageList()
+    {
+        DetachNetaListEvents();
+
+        var vm = App.MainViewModel;
+        if (vm is null)
+        {
+            NetaManageList.ItemsSource = null;
+            NetaListCountText.Text = "操作画面の一覧がまだありません";
+            RemoveSelectedNetaBtn.IsEnabled = false;
+            RemoveAllNetaBtn.IsEnabled = false;
+            return;
+        }
+
+        NetaManageList.ItemsSource = vm.NetaItems;
+        RefreshNetaListCount(vm);
+        RemoveSelectedNetaBtn.IsEnabled = true;
+        RemoveAllNetaBtn.IsEnabled = vm.NetaItems.Count > 0;
+        vm.NetaItems.CollectionChanged += OnNetaItemsCollectionChanged;
+    }
+
+    private void OnNetaItemsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        var vm = App.MainViewModel;
+        if (vm is null)
+            return;
+        RefreshNetaListCount(vm);
+        RemoveAllNetaBtn.IsEnabled = vm.NetaItems.Count > 0;
+    }
+
+    private void RefreshNetaListCount(MainPageViewModel vm) =>
+        NetaListCountText.Text = $"{vm.NetaItems.Count} 本";
+
+    private async Task RemoveSelectedNetaAsync()
+    {
+        var vm = App.MainViewModel;
+        if (vm is null)
+            return;
+
+        var selected = NetaManageList.SelectedItems.OfType<NetaItem>().ToList();
+        if (selected.Count == 0)
+        {
+            await ShowInfoAsync("選択なし", "消去するネタにチェックを入れてください。");
+            return;
+        }
+
+        var ok = await ConfirmAsync(
+            "選択を消去",
+            $"選択中の {selected.Count} 本を一覧から外しますか？\nPC上のファイルは削除されません。");
+        if (!ok)
+            return;
+
+        vm.RemoveNetaItems(selected);
+        NetaManageList.SelectedItems.Clear();
+    }
+
+    private async Task RemoveAllNetaAsync()
+    {
+        var vm = App.MainViewModel;
+        if (vm is null || vm.NetaItems.Count == 0)
+            return;
+
+        var count = vm.NetaItems.Count;
+        var ok = await ConfirmAsync(
+            "一斉消去",
+            $"一覧の {count} 本すべてを外しますか？\nPC上のファイルは削除されません。");
+        if (!ok)
+            return;
+
+        vm.ClearAllNetaItems();
+        NetaManageList.SelectedItems.Clear();
+    }
+
+    private async Task<bool> ConfirmAsync(string title, string content)
+    {
+        var root = Content?.XamlRoot;
+        if (root is null)
+            return false;
+
+        var dialog = new ContentDialog
+        {
+            Title = title,
+            Content = content,
+            PrimaryButtonText = "消去",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = root,
+        };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
+    }
+
+    private async Task ShowInfoAsync(string title, string content)
+    {
+        var root = Content?.XamlRoot;
+        if (root is null)
+            return;
+
+        var dialog = new ContentDialog
+        {
+            Title = title,
+            Content = content,
+            CloseButtonText = "OK",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = root,
+        };
+        await dialog.ShowAsync();
     }
 
     private void LoadFromSettings()
@@ -176,7 +317,9 @@ public sealed partial class SettingsWindow : Window
             PenSizeBox.Value = AppSettings.PenThickness;
             EraserSizeBox.Value = AppSettings.EraserThickness;
             FullSizeNextLaunchCheck.IsChecked = AppSettings.LaunchControlPanelFullSize;
+            ResumePlaybackCheck.IsChecked = AppSettings.ResumePlayback;
             SaveFolderPathText.Text = SaveFolderService.EnsureExists();
+            ConvertFolderPathText.Text = MovTranscodeService.EnsureCacheDirectory();
             RefreshDemoPanel();
             CloseColorEditor();
         }
@@ -308,6 +451,9 @@ public sealed partial class SettingsWindow : Window
         PanelClean.Visibility = tag == "Clean" ? Visibility.Visible : Visibility.Collapsed;
         PanelExit.Visibility = tag == "Exit" ? Visibility.Visible : Visibility.Collapsed;
         PanelSave.Visibility = tag == "Save" ? Visibility.Visible : Visibility.Collapsed;
+        PanelConvert.Visibility = tag == "Convert" ? Visibility.Visible : Visibility.Collapsed;
+        PanelNetaList.Visibility = tag == "NetaList" ? Visibility.Visible : Visibility.Collapsed;
+        PanelPlayback.Visibility = tag == "Playback" ? Visibility.Visible : Visibility.Collapsed;
         PanelVersion.Visibility = tag == "Version" ? Visibility.Visible : Visibility.Collapsed;
         PanelDemo.Visibility = tag == "Demo" ? Visibility.Visible : Visibility.Collapsed;
         PanelPalette.Visibility = tag == "Palette" ? Visibility.Visible : Visibility.Collapsed;
@@ -319,6 +465,10 @@ public sealed partial class SettingsWindow : Window
 
         if (tag == "Save")
             SaveFolderPathText.Text = SaveFolderService.EnsureExists();
+        if (tag == "Convert")
+            ConvertFolderPathText.Text = MovTranscodeService.EnsureCacheDirectory();
+        if (tag == "NetaList")
+            BindNetaManageList();
         if (tag == "Demo")
             RefreshDemoPanel();
         if (tag == "Version")

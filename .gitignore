@@ -44,6 +44,9 @@ publish/
 PublishScripts/
 dist/
 
+# Bundled ffmpeg binary (downloaded by scripts/Ensure-Ffmpeg.ps1)
+third_party/ffmpeg/
+
 # Code analysis and tooling
 _ReSharper*/
 *.DotSettings.user

@@ -119,72 +119,100 @@
                                 BorderBrush="{StaticResource OpPanelBorderBrush}"
                                 BorderThickness="1"
                                 CornerRadius="0">
-                                <Grid ColumnSpacing="8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="84" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Border
-                                        Width="84"
-                                        Height="47"
-                                        Background="#FF020617"
-                                        BorderBrush="#FF334155"
-                                        BorderThickness="1">
-                                        <Grid>
-                                            <TextBlock
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"
-                                                FontSize="10"
-                                                Foreground="#FF64748B"
-                                                Text="…" />
-                                            <Image
-                                                Stretch="UniformToFill"
-                                                Source="{x:Bind Thumbnail, Mode=OneWay}" />
-                                            <Border
-                                                Margin="2"
-                                                Padding="3,1"
-                                                HorizontalAlignment="Left"
-                                                VerticalAlignment="Bottom"
-                                                Background="#CC020617"
-                                                CornerRadius="0"
-                                                Visibility="{x:Bind FrameRateVisibility, Mode=OneWay}">
+                                <Grid>
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="84" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border
+                                            Width="84"
+                                            Height="47"
+                                            Background="#FF020617"
+                                            BorderBrush="#FF334155"
+                                            BorderThickness="1">
+                                            <Grid>
                                                 <TextBlock
-                                                    FontSize="9"
-                                                    FontWeight="SemiBold"
-                                                    Foreground="#FFE2E8F0"
-                                                    Text="{x:Bind FrameRateLabel, Mode=OneWay}" />
-                                            </Border>
-                                            <Button
-                                                Width="18"
-                                                Height="18"
-                                                MinWidth="18"
-                                                MinHeight="18"
-                                                Margin="1"
-                                                Padding="0"
-                                                HorizontalAlignment="Right"
-                                                VerticalAlignment="Bottom"
-                                                Background="#CC020617"
-                                                BorderBrush="#FF64748B"
-                                                BorderThickness="1"
-                                                Content="×"
-                                                FontSize="10"
-                                                FontWeight="Bold"
-                                                Foreground="#FFF8FAFC"
-                                                ToolTipService.ToolTip="削除"
-                                                Command="{Binding ViewModel.DeleteNetaCommand, ElementName=RootPage}"
-                                                CommandParameter="{x:Bind}"
-                                                IsEnabled="{Binding ViewModel.IsEditMode, ElementName=RootPage}" />
-                                        </Grid>
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="10"
+                                                    Foreground="#FF64748B"
+                                                    Text="…" />
+                                                <Image
+                                                    Stretch="UniformToFill"
+                                                    Source="{x:Bind Thumbnail, Mode=OneWay}" />
+                                                <Border Visibility="{Binding ViewModel.EditModeVisibility, ElementName=RootPage}">
+                                                    <Border
+                                                        Margin="2"
+                                                        Padding="3,1"
+                                                        HorizontalAlignment="Left"
+                                                        VerticalAlignment="Top"
+                                                        Background="#CC020617"
+                                                        CornerRadius="0"
+                                                        Visibility="{x:Bind ConvertStatusVisibility, Mode=OneWay}">
+                                                        <TextBlock
+                                                            FontSize="9"
+                                                            FontWeight="SemiBold"
+                                                            Foreground="{x:Bind ConvertStatusBrush, Mode=OneWay}"
+                                                            Text="{x:Bind ConvertStatusLabel, Mode=OneWay}" />
+                                                    </Border>
+                                                </Border>
+                                                <Border
+                                                    Margin="2"
+                                                    Padding="3,1"
+                                                    HorizontalAlignment="Left"
+                                                    VerticalAlignment="Bottom"
+                                                    Background="#CC020617"
+                                                    CornerRadius="0"
+                                                    Visibility="{x:Bind FrameRateVisibility, Mode=OneWay}">
+                                                    <TextBlock
+                                                        FontSize="9"
+                                                        FontWeight="SemiBold"
+                                                        Foreground="#FFE2E8F0"
+                                                        Text="{x:Bind FrameRateLabel, Mode=OneWay}" />
+                                                </Border>
+                                                <Button
+                                                    Width="18"
+                                                    Height="18"
+                                                    MinWidth="18"
+                                                    MinHeight="18"
+                                                    Margin="1"
+                                                    Padding="0"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Bottom"
+                                                    Background="#CC020617"
+                                                    BorderBrush="#FF64748B"
+                                                    BorderThickness="1"
+                                                    Content="×"
+                                                    FontSize="10"
+                                                    FontWeight="Bold"
+                                                    Foreground="#FFF8FAFC"
+                                                    ToolTipService.ToolTip="削除"
+                                                    Command="{Binding ViewModel.DeleteNetaCommand, ElementName=RootPage}"
+                                                    CommandParameter="{x:Bind}"
+                                                    IsEnabled="{Binding ViewModel.IsEditMode, ElementName=RootPage}" />
+                                            </Grid>
+                                        </Border>
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            FontSize="11"
+                                            Foreground="{StaticResource OpTextBrush}"
+                                            Text="{x:Bind DisplayName}"
+                                            TextWrapping="WrapWholeWords"
+                                            TextTrimming="CharacterEllipsis"
+                                            MaxLines="3" />
+                                    </Grid>
+                                    <!-- 変換中: ネタ行全体を左→右で明るく戻す（右原点で暗い帯が縮む） -->
+                                    <Border
+                                        Background="#B3000000"
+                                        IsHitTestVisible="False"
+                                        Visibility="{x:Bind ConvertProgressVisibility, Mode=OneWay}"
+                                        RenderTransformOrigin="1,0.5">
+                                        <Border.RenderTransform>
+                                            <ScaleTransform ScaleX="{x:Bind ConvertDarkScaleX, Mode=OneWay}" />
+                                        </Border.RenderTransform>
                                     </Border>
-                                    <TextBlock
-                                        Grid.Column="1"
-                                        VerticalAlignment="Center"
-                                        FontSize="11"
-                                        Foreground="{StaticResource OpTextBrush}"
-                                        Text="{x:Bind DisplayName}"
-                                        TextWrapping="WrapWholeWords"
-                                        TextTrimming="CharacterEllipsis"
-                                        MaxLines="3" />
                                 </Grid>
                             </Border>
                         </DataTemplate>

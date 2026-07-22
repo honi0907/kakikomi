@@ -16,6 +16,7 @@ public static class AppSettings
     private const string KeyEraserThickness = "EraserThickness";
     private const string KeyLaunchFullSize = "LaunchControlPanelFullSize";
     private const string KeyDemoMode = "DemoMode";
+    private const string KeyResumePlayback = "ResumePlayback";
 
     /// <summary>DEMO モード解除用パスワード。</summary>
     public const string DemoUnlockPassword = "incre1881";
@@ -28,6 +29,12 @@ public static class AppSettings
     public static double PenThickness { get; private set; } = 6;
     public static double EraserThickness { get; private set; } = 28;
     public static bool LaunchControlPanelFullSize { get; private set; }
+
+    /// <summary>
+    /// ON: 別ネタへ行って戻ると、前回止めた位置から再開。
+    /// OFF（既定）: 戻るたびに先頭から。
+    /// </summary>
+    public static bool ResumePlayback { get; private set; }
 
     /// <summary>既定 ON。解除パスワードで OFF にできる。</summary>
     public static bool DemoMode { get; private set; } = true;
@@ -42,13 +49,11 @@ public static class AppSettings
             PenBlue = ReadColor(values, KeyPenBlue, PenBlue);
             PenThickness = ReadDouble(values, KeyPenThickness, 6);
             EraserThickness = ReadDouble(values, KeyEraserThickness, 28);
-            LaunchControlPanelFullSize = values.TryGetValue(KeyLaunchFullSize, out var full)
-                && full is bool b
-                && b;
+            LaunchControlPanelFullSize = ReadBool(values, KeyLaunchFullSize, false);
+            // 未保存時は既定 OFF（戻ると先頭から）
+            ResumePlayback = ReadBool(values, KeyResumePlayback, false);
             // 未保存時は既定 ON
-            DemoMode = !values.TryGetValue(KeyDemoMode, out var demo)
-                || demo is not bool demoFlag
-                || demoFlag;
+            DemoMode = ReadBool(values, KeyDemoMode, true);
         }
         catch
         {
@@ -94,15 +99,14 @@ public static class AppSettings
     public static void SetLaunchControlPanelFullSize(bool enabled)
     {
         LaunchControlPanelFullSize = enabled;
-        try
-        {
-            ApplicationData.Current.LocalSettings.Values[KeyLaunchFullSize] = enabled;
-        }
-        catch
-        {
-            // ignore
-        }
+        WriteBool(KeyLaunchFullSize, enabled);
+        Changed?.Invoke();
+    }
 
+    public static void SetResumePlayback(bool enabled)
+    {
+        ResumePlayback = enabled;
+        WriteBool(KeyResumePlayback, enabled);
         Changed?.Invoke();
     }
 
@@ -118,16 +122,41 @@ public static class AppSettings
     public static void SetDemoMode(bool enabled)
     {
         DemoMode = enabled;
+        WriteBool(KeyDemoMode, enabled);
+        Changed?.Invoke();
+    }
+
+    private static bool ReadBool(IPropertySet values, string key, bool fallback)
+    {
+        if (!values.TryGetValue(key, out var raw) || raw is null)
+            return fallback;
+
+        return raw switch
+        {
+            bool b => b,
+            byte by => by != 0,
+            short s => s != 0,
+            int i => i != 0,
+            long l => l != 0,
+            float f => Math.Abs(f) > float.Epsilon,
+            double d => Math.Abs(d) > double.Epsilon,
+            string str when bool.TryParse(str, out var parsed) => parsed,
+            string str when int.TryParse(str, out var n) => n != 0,
+            _ => fallback
+        };
+    }
+
+    private static void WriteBool(string key, bool value)
+    {
         try
         {
-            ApplicationData.Current.LocalSettings.Values[KeyDemoMode] = enabled;
+            // bool のまま保存（読み出しは型ゆれも許容）
+            ApplicationData.Current.LocalSettings.Values[key] = value;
         }
         catch
         {
             // ignore
         }
-
-        Changed?.Invoke();
     }
 
     private static Color ReadColor(IPropertySet values, string key, Color fallback)

@@ -29,8 +29,14 @@ public sealed partial class MainPage : Page
     {
         var session = App.Engine ?? throw new InvalidOperationException("Engine is not ready.");
         ViewModel = new MainPageViewModel(session);
+        App.MainViewModel = ViewModel;
         InitializeComponent();
         Loaded += OnLoaded;
+        Unloaded += (_, _) =>
+        {
+            if (ReferenceEquals(App.MainViewModel, ViewModel))
+                App.MainViewModel = null;
+        };
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
