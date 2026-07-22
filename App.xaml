@@ -49,29 +49,54 @@
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
-                            <!-- 色は常に TemplateBinding（ThemeResource で上書きしない） -->
-                            <Border
-                                x:Name="OuterRim"
-                                Background="{TemplateBinding BorderBrush}"
-                                Padding="2"
-                                CornerRadius="{TemplateBinding CornerRadius}">
+                            <!-- VSM はテンプレート直下（ルート）に置く。子から親 OuterRim を触ると効かない -->
+                            <Grid x:Name="RootLayout">
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal">
+                                            <VisualState.Setters>
+                                                <Setter Target="FaceOffset.Y" Value="0" />
+                                                <Setter Target="ShadowPlate.Opacity" Value="1" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="PointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="FaceOffset.Y" Value="2" />
+                                                <Setter Target="ShadowPlate.Opacity" Value="0.85" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <VisualState.Setters>
+                                                <Setter Target="FaceOffset.Y" Value="4" />
+                                                <Setter Target="ShadowPlate.Opacity" Value="0.55" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Disabled">
+                                            <VisualState.Setters>
+                                                <Setter Target="RootLayout.Opacity" Value="0.55" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+
+                                <!-- 下の段差（凹みの「床」） -->
+                                <Border
+                                    x:Name="ShadowPlate"
+                                    Background="{TemplateBinding BorderBrush}"
+                                    CornerRadius="{TemplateBinding CornerRadius}"
+                                    Margin="0,4,0,0" />
+
+                                <!-- 面：ホバー／押下で下へ移動して沈む -->
                                 <Border
                                     x:Name="RootBorder"
                                     Background="{TemplateBinding Background}"
-                                    BorderThickness="0"
-                                    CornerRadius="{TemplateBinding CornerRadius}">
-                                    <VisualStateManager.VisualStateGroups>
-                                        <VisualStateGroup x:Name="CommonStates">
-                                            <VisualState x:Name="Normal" />
-                                            <VisualState x:Name="PointerOver" />
-                                            <VisualState x:Name="Pressed">
-                                                <VisualState.Setters>
-                                                    <Setter Target="OuterRim.Padding" Value="2,3,2,1" />
-                                                </VisualState.Setters>
-                                            </VisualState>
-                                            <VisualState x:Name="Disabled" />
-                                        </VisualStateGroup>
-                                    </VisualStateManager.VisualStateGroups>
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="2"
+                                    CornerRadius="{TemplateBinding CornerRadius}"
+                                    Margin="0,0,0,4">
+                                    <Border.RenderTransform>
+                                        <TranslateTransform x:Name="FaceOffset" Y="0" />
+                                    </Border.RenderTransform>
                                     <ContentPresenter
                                         x:Name="ContentPresenter"
                                         Padding="{TemplateBinding Padding}"
@@ -81,7 +106,7 @@
                                         ContentTemplate="{TemplateBinding ContentTemplate}"
                                         Foreground="{TemplateBinding Foreground}" />
                                 </Border>
-                            </Border>
+                            </Grid>
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
@@ -98,45 +123,74 @@
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="ToggleButton">
-                            <!-- 色は常に TemplateBinding。選択色は code-behind で Background を差し替える -->
-                            <Border
-                                x:Name="OuterRim"
-                                Background="{TemplateBinding BorderBrush}"
-                                Padding="2"
-                                CornerRadius="{TemplateBinding CornerRadius}">
+                            <Grid x:Name="RootLayout">
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal">
+                                            <VisualState.Setters>
+                                                <Setter Target="FaceOffset.Y" Value="0" />
+                                                <Setter Target="ShadowPlate.Opacity" Value="1" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="PointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="FaceOffset.Y" Value="2" />
+                                                <Setter Target="ShadowPlate.Opacity" Value="0.85" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <VisualState.Setters>
+                                                <Setter Target="FaceOffset.Y" Value="4" />
+                                                <Setter Target="ShadowPlate.Opacity" Value="0.55" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Disabled">
+                                            <VisualState.Setters>
+                                                <Setter Target="RootLayout.Opacity" Value="0.55" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Checked">
+                                            <VisualState.Setters>
+                                                <Setter Target="FaceOffset.Y" Value="0" />
+                                                <Setter Target="ShadowPlate.Opacity" Value="1" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="CheckedPointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="FaceOffset.Y" Value="2" />
+                                                <Setter Target="ShadowPlate.Opacity" Value="0.85" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="CheckedPressed">
+                                            <VisualState.Setters>
+                                                <Setter Target="FaceOffset.Y" Value="4" />
+                                                <Setter Target="ShadowPlate.Opacity" Value="0.55" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="CheckedDisabled" />
+                                        <VisualState x:Name="Indeterminate" />
+                                        <VisualState x:Name="IndeterminatePointerOver" />
+                                        <VisualState x:Name="IndeterminatePressed" />
+                                        <VisualState x:Name="IndeterminateDisabled" />
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+
+                                <Border
+                                    x:Name="ShadowPlate"
+                                    Background="{TemplateBinding BorderBrush}"
+                                    CornerRadius="{TemplateBinding CornerRadius}"
+                                    Margin="0,4,0,0" />
+
                                 <Border
                                     x:Name="RootBorder"
                                     Background="{TemplateBinding Background}"
-                                    BorderThickness="0"
-                                    CornerRadius="{TemplateBinding CornerRadius}">
-                                    <VisualStateManager.VisualStateGroups>
-                                        <VisualStateGroup x:Name="CommonStates">
-                                            <VisualState x:Name="Normal" />
-                                            <VisualState x:Name="PointerOver" />
-                                            <VisualState x:Name="Pressed">
-                                                <VisualState.Setters>
-                                                    <Setter Target="OuterRim.Padding" Value="2,3,2,1" />
-                                                </VisualState.Setters>
-                                            </VisualState>
-                                            <VisualState x:Name="Disabled">
-                                                <VisualState.Setters>
-                                                    <Setter Target="OuterRim.Opacity" Value="0.55" />
-                                                </VisualState.Setters>
-                                            </VisualState>
-                                            <VisualState x:Name="Checked" />
-                                            <VisualState x:Name="CheckedPointerOver" />
-                                            <VisualState x:Name="CheckedPressed">
-                                                <VisualState.Setters>
-                                                    <Setter Target="OuterRim.Padding" Value="2,3,2,1" />
-                                                </VisualState.Setters>
-                                            </VisualState>
-                                            <VisualState x:Name="CheckedDisabled" />
-                                            <VisualState x:Name="Indeterminate" />
-                                            <VisualState x:Name="IndeterminatePointerOver" />
-                                            <VisualState x:Name="IndeterminatePressed" />
-                                            <VisualState x:Name="IndeterminateDisabled" />
-                                        </VisualStateGroup>
-                                    </VisualStateManager.VisualStateGroups>
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="2"
+                                    CornerRadius="{TemplateBinding CornerRadius}"
+                                    Margin="0,0,0,4">
+                                    <Border.RenderTransform>
+                                        <TranslateTransform x:Name="FaceOffset" Y="0" />
+                                    </Border.RenderTransform>
                                     <ContentPresenter
                                         x:Name="ContentPresenter"
                                         Padding="{TemplateBinding Padding}"
@@ -146,7 +200,7 @@
                                         ContentTemplate="{TemplateBinding ContentTemplate}"
                                         Foreground="{TemplateBinding Foreground}" />
                                 </Border>
-                            </Border>
+                            </Grid>
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
