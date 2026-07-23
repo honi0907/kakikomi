@@ -2,25 +2,33 @@ using Windows.Media.Playback;
 
 namespace Kakikomi.Services;
 
-/// <summary>Operator / Clean の MediaPlayer ペア。A/B 表示スロットまたはウォームキャッシュで使う。</summary>
+/// <summary>
+/// 表示スロット用の単一 MediaPlayer。
+/// コンパネ／外部出力は同じインスタンスを Composition サーフェスで共有し、映像ずれを構造的に無くす。
+/// </summary>
 internal sealed class MediaPlayerPair : IDisposable
 {
-    public MediaPlayer Operator { get; }
-    public MediaPlayer Clean { get; }
+    public MediaPlayer Player { get; }
+
+    /// <summary>互換エイリアス（実体は <see cref="Player"/> と同じ）。</summary>
+    public MediaPlayer Operator => Player;
+
+    /// <summary>互換エイリアス（実体は <see cref="Player"/> と同じ）。</summary>
+    public MediaPlayer Clean => Player;
+
     public string? Path { get; set; }
+    public bool EventsWired { get; set; }
 
     public MediaPlayerPair()
     {
-        Operator = CreatePlayer();
-        Clean = CreatePlayer();
+        Player = CreatePlayer();
     }
 
     public void ClearSource()
     {
         try
         {
-            Operator.Source = null;
-            Clean.Source = null;
+            Player.Source = null;
         }
         catch
         {
@@ -33,8 +41,7 @@ internal sealed class MediaPlayerPair : IDisposable
     public void Dispose()
     {
         ClearSource();
-        Operator.Dispose();
-        Clean.Dispose();
+        Player.Dispose();
     }
 
     private static MediaPlayer CreatePlayer()
@@ -43,9 +50,9 @@ internal sealed class MediaPlayerPair : IDisposable
         {
             AutoPlay = false,
             RealTimePlayback = false,
-            // ウォーム／先頭フレーム確定の Play で音が出ないように既定ミュート
             IsMuted = true,
-            Volume = 0
+            Volume = 0,
+            IsVideoFrameServerEnabled = true
         };
         player.CommandManager.IsEnabled = false;
         return player;

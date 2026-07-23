@@ -17,8 +17,14 @@ public enum NetaConvertState
 
 public sealed partial class NetaItem : ObservableObject
 {
-    public required string DisplayName { get; init; }
-    public required string Path { get; init; }
+    [ObservableProperty]
+    private string displayName = string.Empty;
+
+    [ObservableProperty]
+    private string path = string.Empty;
+
+    [ObservableProperty]
+    private bool isMissing;
 
     [ObservableProperty]
     private ImageSource? thumbnail;
@@ -48,6 +54,12 @@ public sealed partial class NetaItem : ObservableObject
     public Visibility ConvertProgressVisibility =>
         ConvertState == NetaConvertState.Converting ? Visibility.Visible : Visibility.Collapsed;
 
+    public Visibility MissingOverlayVisibility =>
+        IsMissing ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>欠落時はカード全体を暗くする。</summary>
+    public double CardOpacity => IsMissing ? 0.42 : 1.0;
+
     /// <summary>暗い帯の ScaleX。進捗0で1（全体暗）、1で0。右原点で縮む。</summary>
     public double ConvertDarkScaleX => 1.0 - Math.Clamp(ConvertProgress, 0, 1);
 
@@ -56,6 +68,12 @@ public sealed partial class NetaItem : ObservableObject
 
     partial void OnConvertProgressChanged(double value) =>
         OnPropertyChanged(nameof(ConvertDarkScaleX));
+
+    partial void OnIsMissingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(MissingOverlayVisibility));
+        OnPropertyChanged(nameof(CardOpacity));
+    }
 
     partial void OnConvertStateChanged(NetaConvertState value)
     {
@@ -89,10 +107,30 @@ public sealed partial class NetaItem : ObservableObject
         OnPropertyChanged(nameof(ConvertDarkScaleX));
     }
 
+    public void RefreshMissingState()
+    {
+        IsMissing = string.IsNullOrWhiteSpace(Path) || !File.Exists(Path);
+        if (IsMissing)
+        {
+            Thumbnail = null;
+            FrameRateLabel = string.Empty;
+            ConvertState = NetaConvertState.None;
+        }
+    }
+
+    public void RelocateTo(string newPath)
+    {
+        Path = newPath;
+        DisplayName = System.IO.Path.GetFileNameWithoutExtension(newPath);
+        RefreshMissingState();
+        if (!IsMissing)
+            RefreshConvertState();
+    }
+
     /// <summary>ディスク上の変換キャッシュ状態からバッジを更新。</summary>
     public void RefreshConvertState()
     {
-        if (!MovTranscodeService.IsMovPath(Path))
+        if (IsMissing || !MovTranscodeService.IsMovPath(Path))
         {
             ConvertState = NetaConvertState.None;
             return;

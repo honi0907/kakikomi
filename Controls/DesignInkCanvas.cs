@@ -14,7 +14,7 @@ public sealed class DesignInkCanvas : Canvas
     private EngineSession? _session;
     private bool _inputEnabled;
     private Color _color = Color.FromArgb(255, 255, 48, 48);
-    private double _thickness = 6;
+    private double _thickness = 8;
     private bool _isEraser;
     private bool _drawing;
     private uint? _activePointerId;

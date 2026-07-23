@@ -25,6 +25,7 @@ public partial class MainPageViewModel : ObservableObject
     private double _timelineDurationSeconds;
     private double _pendingPreviewSeconds;
     private bool _hasPendingPreview;
+    private bool _suppressNetaListPersist;
 
     public ObservableCollection<NetaItem> NetaItems { get; } = [];
 
@@ -65,7 +66,7 @@ public partial class MainPageViewModel : ObservableObject
     private bool isPenEraser;
 
     [ObservableProperty]
-    private string penThicknessLabel = "太さ 6";
+    private string penThicknessLabel = "太さ 8";
 
     [ObservableProperty]
     private bool isEditMode = true;
@@ -122,6 +123,8 @@ public partial class MainPageViewModel : ObservableObject
         _previewSeekTimer.Interval = TimeSpan.FromMilliseconds(16);
         _previewSeekTimer.IsRepeating = true;
         _previewSeekTimer.Tick += (_, _) => FlushPendingPreviewSeek();
+
+        NetaItems.CollectionChanged += (_, _) => PersistNetaList();
     }
 
     public void BeginTimelineSeek()
@@ -217,6 +220,20 @@ public partial class MainPageViewModel : ObservableObject
     {
         try
         {
+            var stored = NetaListStore.TryLoad();
+            if (stored is { Count: > 0 })
+            {
+                var fromStore = _session.CreateNetaItemsFromStoredPaths(stored);
+                ReplaceNetaList(fromStore);
+                var missing = fromStore.Count(i => i.IsMissing);
+                StatusText = missing > 0
+                    ? $"一覧復元: {fromStore.Count} 本（うち欠落 {missing} 本）"
+                    : $"一覧復元: {fromStore.Count} 本";
+                await OfferMovConvertAsync(fromStore.Where(i => !i.IsMissing).ToList());
+                return;
+            }
+
+            // 旧仕様: フォルダパスだけ覚えていた場合は再スキャンして一覧化
             var items = await _session.TryLoadSavedFolderAsync();
             if (items is null)
             {
@@ -225,6 +242,7 @@ public partial class MainPageViewModel : ObservableObject
             }
 
             ReplaceNetaList(items);
+            PersistNetaList();
             StatusText = $"フォルダ読込: {NetaItems.Count} 本";
             await OfferMovConvertAsync(items);
         }
@@ -332,13 +350,15 @@ public partial class MainPageViewModel : ObservableObject
         try
         {
             var items = await _session.LoadNetaFolderFromPathAsync(path);
-            ReplaceNetaList(items);
+            var added = AppendNetaList(items);
             var name = System.IO.Path.GetFileName(path.TrimEnd('\\', '/'));
             if (string.IsNullOrEmpty(name))
                 name = path;
             StatusText = items.Count == 0
                 ? $"{name}（動画なし。mp4/mov/mkv/wmv を入れて再選択）"
-                : $"{name}（{NetaItems.Count} 本）";
+                : added == 0
+                    ? $"{name}（新規なし / 合計 {NetaItems.Count} 本）"
+                    : $"{name}（+{added} 本 / 合計 {NetaItems.Count} 本）";
             await OfferMovConvertAsync(items);
         }
         catch (Exception ex)
@@ -348,18 +368,36 @@ public partial class MainPageViewModel : ObservableObject
     }
 
     [RelayCommand(CanExecute = nameof(CanUseEditControls))]
-    private async Task RefreshFolderAsync()
+    private async Task PickFilesAsync()
     {
-        var items = await _session.TryLoadSavedFolderAsync();
-        if (items is null)
+        IReadOnlyList<string> paths;
+        try
         {
-            StatusText = "保存済みフォルダがありません。フォルダ選択してください";
+            paths = NativeFolderPicker.PickVideoFiles(App.WindowHandle, initialPath: _session.FolderPath);
+            if (paths.Count == 0)
+                return;
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"ファイル選択失敗: {ex.Message}";
             return;
         }
 
-        ReplaceNetaList(items);
-        StatusText = $"更新: {NetaItems.Count} 本";
-        await OfferMovConvertAsync(items);
+        try
+        {
+            var items = _session.CreateNetaItemsFromPaths(paths);
+            var added = AppendNetaList(items);
+            StatusText = items.Count == 0
+                ? "対応動画がありません（mp4/mov/mkv/wmv など）"
+                : added == 0
+                    ? $"新規なし / 合計 {NetaItems.Count} 本"
+                    : $"+{added} 本 / 合計 {NetaItems.Count} 本";
+            await OfferMovConvertAsync(items);
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"読込失敗: {ex.GetType().Name}: {ex.Message}";
+        }
     }
 
     partial void OnSelectedNetaChanged(NetaItem? value)
@@ -367,11 +405,84 @@ public partial class MainPageViewModel : ObservableObject
         if (value is null)
             return;
 
+        if (value.IsMissing)
+        {
+            _ = RelocateMissingNetaAsync(value);
+            return;
+        }
+
         _ = OpenSelectedAsync(value);
+    }
+
+    private async Task RelocateMissingNetaAsync(NetaItem item)
+    {
+        StatusText = $"素材なし: {item.DisplayName} → ファイルを指定してください";
+
+        string? path;
+        try
+        {
+            var initial = System.IO.Path.GetDirectoryName(item.Path);
+            if (string.IsNullOrWhiteSpace(initial) || !Directory.Exists(initial))
+                initial = _session.FolderPath;
+
+            path = NativeFolderPicker.PickSingleVideoFile(
+                App.WindowHandle,
+                title: $"「{item.DisplayName}」の素材を指定",
+                initialPath: initial);
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"ファイル選択失敗: {ex.Message}";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            StatusText = "素材の再指定をキャンセルしました";
+            return;
+        }
+
+        if (!EngineSession.IsVideoFile(path))
+        {
+            StatusText = "動画ファイルを選んでください";
+            return;
+        }
+
+        var conflict = NetaItems.FirstOrDefault(i =>
+            !ReferenceEquals(i, item)
+            && string.Equals(i.Path, path, StringComparison.OrdinalIgnoreCase));
+        if (conflict is not null)
+        {
+            StatusText = $"すでに一覧にあります: {conflict.DisplayName}";
+            return;
+        }
+
+        var oldPath = item.Path;
+        item.RelocateTo(path);
+        PersistNetaList();
+
+        if (!item.IsMissing)
+        {
+            _ = LoadThumbnailsAsync([item], CancellationToken.None);
+            _session.ScheduleWarmAll([item.Path]);
+        }
+
+        StatusText = $"素材を再指定: {item.DisplayName}";
+        if (!string.Equals(oldPath, item.Path, StringComparison.OrdinalIgnoreCase))
+            _session.UnloadNeta(oldPath);
+
+        await OpenSelectedAsync(item);
+        await OfferMovConvertAsync([item]);
     }
 
     private async Task OpenSelectedAsync(NetaItem item)
     {
+        if (item.IsMissing)
+        {
+            await RelocateMissingNetaAsync(item);
+            return;
+        }
+
         _openNetaCts?.Cancel();
         _openNetaCts?.Dispose();
         _openNetaCts = new CancellationTokenSource();
@@ -618,7 +729,7 @@ public partial class MainPageViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(EditModeVisibility));
         PickFolderCommand.NotifyCanExecuteChanged();
-        RefreshFolderCommand.NotifyCanExecuteChanged();
+        PickFilesCommand.NotifyCanExecuteChanged();
         OpenSettingsCommand.NotifyCanExecuteChanged();
         DeleteNetaCommand.NotifyCanExecuteChanged();
     }
@@ -678,15 +789,80 @@ public partial class MainPageViewModel : ObservableObject
         _thumbnailLoadCts = new CancellationTokenSource();
         var token = _thumbnailLoadCts.Token;
 
-        NetaItems.Clear();
-        foreach (var item in items)
+        _suppressNetaListPersist = true;
+        try
         {
-            item.RefreshConvertState();
-            NetaItems.Add(item);
+            NetaItems.Clear();
+            foreach (var item in items)
+            {
+                item.RefreshMissingState();
+                if (!item.IsMissing)
+                    item.RefreshConvertState();
+                NetaItems.Add(item);
+            }
+        }
+        finally
+        {
+            _suppressNetaListPersist = false;
         }
 
+        PersistNetaList();
+
+        var existing = items.Where(i => !i.IsMissing).ToList();
         // 変換後にウォームし直す（OfferMovConvertAsync 側）。未変換のまま先に温めると黒画面になる
-        _ = LoadThumbnailsAsync(items, token);
+        _ = LoadThumbnailsAsync(existing, token);
+    }
+
+    /// <summary>既存一覧を残したまま追記（同一パスはスキップ）。戻り値は追加本数。</summary>
+    private int AppendNetaList(IReadOnlyList<NetaItem> items)
+    {
+        if (items.Count == 0)
+            return 0;
+
+        _thumbnailLoadCts?.Cancel();
+        _thumbnailLoadCts?.Dispose();
+        _thumbnailLoadCts = new CancellationTokenSource();
+        var token = _thumbnailLoadCts.Token;
+
+        var existing = new HashSet<string>(
+            NetaItems.Select(i => i.Path),
+            StringComparer.OrdinalIgnoreCase);
+        var added = new List<NetaItem>();
+        _suppressNetaListPersist = true;
+        try
+        {
+            foreach (var item in items)
+            {
+                if (!existing.Add(item.Path))
+                    continue;
+
+                item.RefreshMissingState();
+                if (!item.IsMissing)
+                    item.RefreshConvertState();
+                NetaItems.Add(item);
+                added.Add(item);
+            }
+        }
+        finally
+        {
+            _suppressNetaListPersist = false;
+        }
+
+        if (added.Count > 0)
+        {
+            PersistNetaList();
+            _ = LoadThumbnailsAsync(added.Where(i => !i.IsMissing).ToList(), token);
+        }
+
+        return added.Count;
+    }
+
+    private void PersistNetaList()
+    {
+        if (_suppressNetaListPersist)
+            return;
+
+        NetaListStore.Save(NetaItems.Select(i => i.Path));
     }
 
     private void SetItemConvertState(string path, NetaConvertState state)

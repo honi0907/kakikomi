@@ -29,24 +29,15 @@ if (Test-Path $publish) {
 }
 New-Item -ItemType Directory -Force -Path $publish | Out-Null
 
-$msbuild = @(
-    "${env:ProgramFiles}\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe",
-    "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
-) | Where-Object { Test-Path $_ } | Select-Object -First 1
-
-if ($msbuild) {
-    Write-Host "Using MSBuild: $msbuild"
-    & $msbuild $csproj /t:Restore,Publish /p:Configuration=$Configuration /p:Platform=x64 /p:RuntimeIdentifier=$Runtime /p:PublishSingleFile=false /p:WindowsAppSDKSelfContained=true /p:WindowsPackageType=None /p:PublishDir="$publish\\" /v:m
-} else {
-    dotnet publish $csproj `
-        -c $Configuration `
-        -r $Runtime `
-        -p:Platform=x64 `
-        -p:PublishSingleFile=false `
-        -p:WindowsAppSDKSelfContained=true `
-        -p:WindowsPackageType=None `
-        -o $publish
-}
+# Prefer dotnet publish for unpackaged WinUI (MSBuild /t:Restore,Publish can skip XAML gen).
+dotnet publish $csproj `
+    -c $Configuration `
+    -r $Runtime `
+    -p:Platform=x64 `
+    -p:PublishSingleFile=false `
+    -p:WindowsAppSDKSelfContained=true `
+    -p:WindowsPackageType=None `
+    -o $publish
 
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
 

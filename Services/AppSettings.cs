@@ -26,7 +26,7 @@ public static class AppSettings
     public static Color PenRed { get; private set; } = Color.FromArgb(255, 239, 68, 68);
     public static Color PenGreen { get; private set; } = Color.FromArgb(255, 34, 197, 94);
     public static Color PenBlue { get; private set; } = Color.FromArgb(255, 59, 130, 246);
-    public static double PenThickness { get; private set; } = 6;
+    public static double PenThickness { get; private set; } = 8;
     public static double EraserThickness { get; private set; } = 28;
     public static bool LaunchControlPanelFullSize { get; private set; }
 
@@ -47,7 +47,7 @@ public static class AppSettings
             PenRed = ReadColor(values, KeyPenRed, PenRed);
             PenGreen = ReadColor(values, KeyPenGreen, PenGreen);
             PenBlue = ReadColor(values, KeyPenBlue, PenBlue);
-            PenThickness = ReadDouble(values, KeyPenThickness, 6);
+            PenThickness = ReadDouble(values, KeyPenThickness, 8);
             EraserThickness = ReadDouble(values, KeyEraserThickness, 28);
             LaunchControlPanelFullSize = ReadBool(values, KeyLaunchFullSize, false);
             // 未保存時は既定 OFF（戻ると先頭から）

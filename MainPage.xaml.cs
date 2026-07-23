@@ -9,19 +9,14 @@ namespace Kakikomi;
 
 public sealed partial class MainPage : Page
 {
-    private static readonly Color IdleBg = Color.FromArgb(255, 248, 250, 252);
-    private static readonly Color IdleFg = Color.FromArgb(255, 15, 23, 42);
-    private static readonly Color IdleBorder = Color.FromArgb(255, 71, 85, 105);
+    private static readonly Color IdleBg = Color.FromArgb(255, 85, 106, 132);
+    private static readonly Color IdleFg = Color.FromArgb(255, 248, 250, 252);
     private static readonly Color SelectedRateBg = Color.FromArgb(255, 13, 148, 136);
-    private static readonly Color SelectedRateBorder = Color.FromArgb(255, 15, 118, 110);
-    private static readonly Color White = Color.FromArgb(255, 255, 255, 255);
     private static readonly Color PlayStoppedBg = Color.FromArgb(255, 220, 38, 38);
-    private static readonly Color PlayStoppedBorder = Color.FromArgb(255, 127, 29, 29);
     private static readonly Color PlayPlayingBg = Color.FromArgb(255, 37, 99, 235);
-    private static readonly Color PlayPlayingBorder = Color.FromArgb(255, 30, 64, 175);
-    private static readonly Color DisabledBg = Color.FromArgb(255, 51, 65, 85);
+    private static readonly Color DisabledBg = Color.FromArgb(255, 46, 58, 79);
     private static readonly Color DisabledFg = Color.FromArgb(255, 148, 163, 184);
-    private static readonly Color DisabledBorder = Color.FromArgb(255, 30, 41, 59);
+    private static readonly Color White = Color.FromArgb(255, 255, 255, 255);
 
     public MainPageViewModel ViewModel { get; }
 
@@ -42,8 +37,8 @@ public sealed partial class MainPage : Page
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         Loaded -= OnLoaded;
-        OperatorPlayerA.SetMediaPlayer(ViewModel.Session.GetOperatorPlayerForSlot(0));
-        OperatorPlayerB.SetMediaPlayer(ViewModel.Session.GetOperatorPlayerForSlot(1));
+        OperatorPlayerA.Attach(ViewModel.Session.GetOperatorPlayerForSlot(0));
+        OperatorPlayerB.Attach(ViewModel.Session.GetOperatorPlayerForSlot(1));
         UpdateOperatorSlotVisibility(ViewModel.Session.VisibleSlotIndex);
         InkLayer.Attach(ViewModel.Session, inputEnabled: true);
         ViewModel.PenChanged += OnPenChanged;
@@ -53,20 +48,13 @@ public sealed partial class MainPage : Page
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
         InkLayer.IsHitTestVisible = !ViewModel.IsPlaying;
 
-        ApplyButtonBrushes(PickFolderBtn);
-        ApplyButtonBrushes(RefreshBtn);
-        ApplyButtonBrushes(EditModeBtn);
-        ApplyButtonBrushes(SettingsBtn);
-        ApplyButtonBrushes(SkipBackBtn);
-        ApplyButtonBrushes(SkipForwardBtn);
-        ApplyButtonBrushes(ClearInkBtn);
-        ApplyButtonBrushes(PenThicknessMinusBtn);
-        ApplyButtonBrushes(PenThicknessPlusBtn);
-
+        ApplyChrome(PlayToggle, IdleBg, IdleFg);
+        ApplyIdleChromeToSecondaryButtons();
         UpdatePlayToggleLook();
         UpdateRateToggleLooks();
         UpdateEraserToggleLook();
         UpdateEditModeButtonLook();
+        UpdateNetaListReorderMode();
         ApplyPenSwatches();
         UpdateDemoWatermark();
         ViewModel.SetPenRed();
@@ -93,8 +81,8 @@ public sealed partial class MainPage : Page
     private void ApplyVisibleSlot(int visibleSlotIndex)
     {
         var session = ViewModel.Session;
-        OperatorPlayerA.SetMediaPlayer(session.GetOperatorPlayerForSlot(0));
-        OperatorPlayerB.SetMediaPlayer(session.GetOperatorPlayerForSlot(1));
+        OperatorPlayerA.Attach(session.GetOperatorPlayerForSlot(0));
+        OperatorPlayerB.Attach(session.GetOperatorPlayerForSlot(1));
         UpdateOperatorSlotVisibility(visibleSlotIndex);
     }
 
@@ -107,7 +95,10 @@ public sealed partial class MainPage : Page
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(ViewModel.IsEditMode))
+        {
             UpdateEditModeButtonLook();
+            UpdateNetaListReorderMode();
+        }
 
         if (e.PropertyName == nameof(ViewModel.IsPlaying))
         {
@@ -156,88 +147,75 @@ public sealed partial class MainPage : Page
         PenBlueSwatch.Fill = new SolidColorBrush(AppSettings.PenBlue);
     }
 
-    private static void ApplyButtonBrushes(FrameworkElement button)
+    private static void ApplyChrome(Control button, Color background, Color foreground)
     {
-        var hover = Color.FromArgb(255, 226, 232, 240);
-        var pressed = Color.FromArgb(255, 203, 213, 225);
-        var borderHot = Color.FromArgb(255, 51, 65, 85);
+        button.Background = new SolidColorBrush(background);
+        button.Foreground = new SolidColorBrush(foreground);
+        button.BorderThickness = new Thickness(0);
+        button.BorderBrush = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
+    }
 
-        SetBrush(button, "ButtonBackground", IdleBg);
-        SetBrush(button, "ButtonBackgroundPointerOver", hover);
-        SetBrush(button, "ButtonBackgroundPressed", pressed);
-        SetBrush(button, "ButtonBackgroundDisabled", Color.FromArgb(255, 71, 85, 105));
-        SetBrush(button, "ButtonForeground", IdleFg);
-        SetBrush(button, "ButtonForegroundPointerOver", IdleFg);
-        SetBrush(button, "ButtonForegroundPressed", Color.FromArgb(255, 30, 41, 59));
-        SetBrush(button, "ButtonForegroundDisabled", Color.FromArgb(255, 148, 163, 184));
-        SetBrush(button, "ButtonBorderBrush", IdleBorder);
-        SetBrush(button, "ButtonBorderBrushPointerOver", borderHot);
-        SetBrush(button, "ButtonBorderBrushPressed", Color.FromArgb(255, 30, 41, 59));
-        SetBrush(button, "ButtonBorderBrushDisabled", Color.FromArgb(255, 51, 65, 85));
-
-        if (button is Control control)
-            ApplyChrome(control, IdleBg, IdleFg, IdleBorder);
+    private void ApplyIdleChromeToSecondaryButtons()
+    {
+        ApplyChrome(SkipBackBtn, IdleBg, IdleFg);
+        ApplyChrome(SkipForwardBtn, IdleBg, IdleFg);
+        ApplyChrome(ClearInkBtn, IdleBg, IdleFg);
+        ApplyChrome(PenThicknessMinusBtn, IdleBg, IdleFg);
+        ApplyChrome(PenThicknessPlusBtn, IdleBg, IdleFg);
     }
 
     private void UpdatePlayToggleLook()
     {
         if (ViewModel.IsPlaying)
-            ApplyChrome(PlayToggle, PlayPlayingBg, White, PlayPlayingBorder);
+            ApplyChrome(PlayToggle, PlayPlayingBg, White);
         else
-            ApplyChrome(PlayToggle, PlayStoppedBg, White, PlayStoppedBorder);
+            ApplyChrome(PlayToggle, PlayStoppedBg, White);
     }
 
     private void UpdateRateToggleLooks()
     {
-        ApplySelectionChrome(RateNormalBtn, ViewModel.IsRateNormal, SelectedRateBg, SelectedRateBorder);
-        ApplySelectionChrome(RateHalfBtn, ViewModel.IsRateHalf, SelectedRateBg, SelectedRateBorder);
-        ApplySelectionChrome(RateQuarterBtn, ViewModel.IsRateQuarter, SelectedRateBg, SelectedRateBorder);
-        ApplySelectionChrome(RateDoubleBtn, ViewModel.IsRateDouble, SelectedRateBg, SelectedRateBorder);
+        ApplySelectionChrome(RateNormalBtn, ViewModel.IsRateNormal, SelectedRateBg);
+        ApplySelectionChrome(RateHalfBtn, ViewModel.IsRateHalf, SelectedRateBg);
+        ApplySelectionChrome(RateQuarterBtn, ViewModel.IsRateQuarter, SelectedRateBg);
+        ApplySelectionChrome(RateDoubleBtn, ViewModel.IsRateDouble, SelectedRateBg);
     }
 
     private void UpdateEraserToggleLook()
     {
         var checkedBg = Color.FromArgb(255, 71, 85, 105);
-        var checkedBorder = Color.FromArgb(255, 51, 65, 85);
-        ApplySelectionChrome(PenEraserBtn, ViewModel.IsPenEraser, checkedBg, checkedBorder);
+        ApplySelectionChrome(PenEraserBtn, ViewModel.IsPenEraser, checkedBg);
     }
 
-    private static void ApplySelectionChrome(Control button, bool selected, Color selectedBg, Color selectedBorder)
+    private static void ApplySelectionChrome(Control button, bool selected, Color selectedBg)
     {
         if (selected)
-            ApplyChrome(button, selectedBg, White, selectedBorder);
+            ApplyChrome(button, selectedBg, White);
         else
-            ApplyChrome(button, IdleBg, IdleFg, IdleBorder);
-    }
-
-    private static void ApplyChrome(Control button, Color background, Color foreground, Color border)
-    {
-        button.Background = new SolidColorBrush(background);
-        button.Foreground = new SolidColorBrush(foreground);
-        button.BorderBrush = new SolidColorBrush(border);
-    }
-
-    private static void SetBrush(FrameworkElement element, string key, Color color)
-    {
-        element.Resources[key] = new SolidColorBrush(color);
+            ApplyChrome(button, IdleBg, IdleFg);
     }
 
     private void UpdateEditModeButtonLook()
     {
         if (ViewModel.IsEditMode)
         {
-            ApplyChrome(EditModeBtn, SelectedRateBg, White, SelectedRateBorder);
-            ApplyChrome(PickFolderBtn, IdleBg, IdleFg, IdleBorder);
-            ApplyChrome(RefreshBtn, IdleBg, IdleFg, IdleBorder);
-            ApplyChrome(SettingsBtn, IdleBg, IdleFg, IdleBorder);
+            ApplyChrome(EditModeBtn, SelectedRateBg, White);
+            ApplyChrome(AddNetaBtn, IdleBg, IdleFg);
+            ApplyChrome(SettingsBtn, IdleBg, IdleFg);
         }
         else
         {
-            ApplyChrome(EditModeBtn, IdleBg, Color.FromArgb(255, 100, 116, 139), IdleBorder);
-            ApplyChrome(PickFolderBtn, DisabledBg, DisabledFg, DisabledBorder);
-            ApplyChrome(RefreshBtn, DisabledBg, DisabledFg, DisabledBorder);
-            ApplyChrome(SettingsBtn, DisabledBg, DisabledFg, DisabledBorder);
+            ApplyChrome(EditModeBtn, IdleBg, Color.FromArgb(255, 148, 163, 184));
+            ApplyChrome(AddNetaBtn, DisabledBg, DisabledFg);
+            ApplyChrome(SettingsBtn, DisabledBg, DisabledFg);
         }
+    }
+
+    private void UpdateNetaListReorderMode()
+    {
+        var enabled = ViewModel.IsEditMode;
+        NetaList.CanDragItems = enabled;
+        NetaList.CanReorderItems = enabled;
+        NetaList.AllowDrop = enabled;
     }
 
     private void OnPenChanged(Color color, double thickness, bool isEraser) =>

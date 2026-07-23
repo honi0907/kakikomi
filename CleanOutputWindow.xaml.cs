@@ -19,8 +19,8 @@ public sealed partial class CleanOutputWindow : Window
 
     public void Attach(EngineSession session)
     {
-        PlayerElementA.SetMediaPlayer(session.GetCleanPlayerForSlot(0));
-        PlayerElementB.SetMediaPlayer(session.GetCleanPlayerForSlot(1));
+        PlayerElementA.Attach(session.GetCleanPlayerForSlot(0));
+        PlayerElementB.Attach(session.GetCleanPlayerForSlot(1));
         UpdateCleanSlotVisibility(session.VisibleSlotIndex);
         InkLayer.Attach(session, inputEnabled: false);
         session.VisibleSlotChanged += OnVisibleSlotChanged;
@@ -41,8 +41,8 @@ public sealed partial class CleanOutputWindow : Window
         if (session is null)
             return;
 
-        PlayerElementA.SetMediaPlayer(session.GetCleanPlayerForSlot(0));
-        PlayerElementB.SetMediaPlayer(session.GetCleanPlayerForSlot(1));
+        PlayerElementA.Attach(session.GetCleanPlayerForSlot(0));
+        PlayerElementB.Attach(session.GetCleanPlayerForSlot(1));
         UpdateCleanSlotVisibility(visibleSlotIndex);
     }
 

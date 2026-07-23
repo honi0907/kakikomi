@@ -12,16 +12,8 @@
                 Width="1920"
                 Height="1080"
                 Background="Black">
-                <MediaPlayerElement
-                    x:Name="PlayerElementA"
-                    AreTransportControlsEnabled="False"
-                    AutoPlay="False"
-                    Stretch="Uniform" />
-                <MediaPlayerElement
-                    x:Name="PlayerElementB"
-                    AreTransportControlsEnabled="False"
-                    AutoPlay="False"
-                    Stretch="Uniform" />
+                <controls:CompositionVideoHost x:Name="PlayerElementA" />
+                <controls:CompositionVideoHost x:Name="PlayerElementB" />
                 <controls:DesignInkCanvas x:Name="InkLayer" IsHitTestVisible="False" />
                 <controls:DemoWatermarkOverlay
                     x:Name="DemoWatermark"

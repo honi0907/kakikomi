@@ -91,7 +91,8 @@ public sealed partial class SettingsWindow : Window
         RemoveSelectedNetaBtn.Click += async (_, _) => await RemoveSelectedNetaAsync();
         RemoveAllNetaBtn.Click += async (_, _) => await RemoveAllNetaAsync();
 
-        ActiveColorPicker.ColorChanged += OnActiveColorChanged;
+        ActiveColorPalette.ColorChanged += OnMixPaletteColorChanged;
+        ActiveColorPicker.ColorChanged += OnSpectrumColorChanged;
         RgbRBox.ValueChanged += OnRgbBoxChanged;
         RgbGBox.ValueChanged += OnRgbBoxChanged;
         RgbBBox.ValueChanged += OnRgbBoxChanged;
@@ -351,7 +352,7 @@ public sealed partial class SettingsWindow : Window
             _ => AppSettings.PenBlue
         };
 
-        SetActiveColor(color, updatePicker: true, updateRgb: true);
+        SetActiveColor(color, updateMixPalette: true, updateSpectrum: true, updateRgb: true);
         ColorEditorPanel.Visibility = Visibility.Visible;
     }
 
@@ -361,12 +362,20 @@ public sealed partial class SettingsWindow : Window
         ColorEditorPanel.Visibility = Visibility.Collapsed;
     }
 
-    private void OnActiveColorChanged(ColorPicker sender, ColorChangedEventArgs args)
+    private void OnMixPaletteColorChanged(object? sender, Color color)
     {
         if (_loadingUi || _editingPenSlot == 0)
             return;
 
-        ApplyEditedColor(args.NewColor, updateRgb: true);
+        ApplyEditedColor(color, updateMixPalette: false, updateSpectrum: true, updateRgb: true);
+    }
+
+    private void OnSpectrumColorChanged(ColorPicker sender, ColorChangedEventArgs args)
+    {
+        if (_loadingUi || _editingPenSlot == 0)
+            return;
+
+        ApplyEditedColor(args.NewColor, updateMixPalette: true, updateSpectrum: false, updateRgb: true);
     }
 
     private void OnRgbBoxChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
@@ -382,11 +391,10 @@ public sealed partial class SettingsWindow : Window
             (byte)Math.Clamp((int)Math.Round(RgbGBox.Value), 0, 255),
             (byte)Math.Clamp((int)Math.Round(RgbBBox.Value), 0, 255));
 
-        ApplyEditedColor(color, updateRgb: false);
-        SetActiveColor(color, updatePicker: true, updateRgb: false);
+        ApplyEditedColor(color, updateMixPalette: true, updateSpectrum: true, updateRgb: false);
     }
 
-    private void ApplyEditedColor(Color color, bool updateRgb)
+    private void ApplyEditedColor(Color color, bool updateMixPalette, bool updateSpectrum, bool updateRgb)
     {
         switch (_editingPenSlot)
         {
@@ -404,16 +412,18 @@ public sealed partial class SettingsWindow : Window
                 break;
         }
 
-        if (updateRgb)
-            SetActiveColor(color, updatePicker: false, updateRgb: true);
+        if (updateMixPalette || updateSpectrum || updateRgb)
+            SetActiveColor(color, updateMixPalette, updateSpectrum, updateRgb);
     }
 
-    private void SetActiveColor(Color color, bool updatePicker, bool updateRgb)
+    private void SetActiveColor(Color color, bool updateMixPalette, bool updateSpectrum, bool updateRgb)
     {
         _loadingUi = true;
         try
         {
-            if (updatePicker)
+            if (updateMixPalette)
+                ActiveColorPalette.SetColor(color);
+            if (updateSpectrum)
                 ActiveColorPicker.Color = color;
             if (updateRgb)
             {
@@ -487,11 +497,5 @@ public sealed partial class SettingsWindow : Window
     private static void StyleActionButton(Button button)
     {
         button.Style = (Style)Application.Current.Resources["OpButtonStyle"];
-        button.Background = new SolidColorBrush(Color.FromArgb(255, 248, 250, 252));
-        button.Foreground = new SolidColorBrush(Color.FromArgb(255, 15, 23, 42));
-        button.BorderBrush = new SolidColorBrush(Color.FromArgb(255, 71, 85, 105));
-        button.FontSize = 16;
-        button.MinHeight = 44;
-        button.Padding = new Thickness(16, 10, 16, 10);
     }
 }

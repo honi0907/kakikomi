@@ -8,7 +8,7 @@ using Kakikomi.Models;
 namespace Kakikomi.Services;
 
 /// <summary>
-/// Single-process engine: A/B display slots, dual MediaPlayer sync, ink strokes, neta warm cache.
+/// Single-process engine: A/B slots, single MediaPlayer per slot (shared surfaces), ink, warm cache.
 /// </summary>
 public sealed class EngineSession : IDisposable
 {
@@ -59,8 +59,8 @@ public sealed class EngineSession : IDisposable
 
     public EngineSession()
     {
-        WireDurationChanged(_displayPairs[0]);
-        WireDurationChanged(_displayPairs[1]);
+        WirePairEvents(_displayPairs[0]);
+        WirePairEvents(_displayPairs[1]);
     }
 
     public MediaPlayer GetOperatorPlayerForSlot(int slotIndex) =>
@@ -74,6 +74,71 @@ public sealed class EngineSession : IDisposable
         if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
             return Task.FromResult<IReadOnlyList<NetaItem>>([]);
 
+        RememberFolderPath(folderPath);
+
+        List<NetaItem> items;
+        try
+        {
+            items = Directory.EnumerateFiles(folderPath)
+                .Where(IsVideoFile)
+                .OrderBy(p => Path.GetFileName(p), StringComparer.OrdinalIgnoreCase)
+                .Select(p => CreateNetaItem(p, allowMissing: false))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"フォルダを読めません: {folderPath} / {ex.Message}", ex);
+        }
+
+        return Task.FromResult<IReadOnlyList<NetaItem>>(items);
+    }
+
+    public IReadOnlyList<NetaItem> CreateNetaItemsFromPaths(IEnumerable<string> paths)
+    {
+        var items = paths
+            .Where(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p) && IsVideoFile(p))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(p => Path.GetFileName(p), StringComparer.OrdinalIgnoreCase)
+            .Select(p => CreateNetaItem(p, allowMissing: false))
+            .ToList();
+
+        var firstDir = items
+            .Select(i => Path.GetDirectoryName(i.Path))
+            .FirstOrDefault(d => !string.IsNullOrWhiteSpace(d) && Directory.Exists(d));
+        if (firstDir is not null)
+            RememberFolderPath(firstDir);
+
+        return items;
+    }
+
+    /// <summary>保存済みパス順を復元。欠落ファイルも一覧に残す。</summary>
+    public IReadOnlyList<NetaItem> CreateNetaItemsFromStoredPaths(IEnumerable<string> paths)
+    {
+        var items = new List<NetaItem>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in paths)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !seen.Add(path))
+                continue;
+
+            items.Add(CreateNetaItem(path, allowMissing: true));
+        }
+
+        var firstDir = items
+            .Where(i => !i.IsMissing)
+            .Select(i => Path.GetDirectoryName(i.Path))
+            .FirstOrDefault(d => !string.IsNullOrWhiteSpace(d) && Directory.Exists(d));
+        if (firstDir is not null)
+            RememberFolderPath(firstDir);
+
+        return items;
+    }
+
+    public void RememberFolderPath(string folderPath)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
+            return;
+
         _folderPath = folderPath;
         try
         {
@@ -83,26 +148,26 @@ public sealed class EngineSession : IDisposable
         {
             // LocalSettings が使えない環境でも一覧は出す
         }
+    }
 
-        List<NetaItem> items;
-        try
-        {
-            items = Directory.EnumerateFiles(folderPath)
-                .Where(p => VideoExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase))
-                .OrderBy(p => Path.GetFileName(p), StringComparer.OrdinalIgnoreCase)
-                .Select(p => new NetaItem
-                {
-                    DisplayName = Path.GetFileNameWithoutExtension(p),
-                    Path = p
-                })
-                .ToList();
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException($"フォルダを読めません: {folderPath} / {ex.Message}", ex);
-        }
+    public static bool IsVideoFile(string path) =>
+        VideoExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
 
-        return Task.FromResult<IReadOnlyList<NetaItem>>(items);
+    private static NetaItem CreateNetaItem(string path, bool allowMissing)
+    {
+        var exists = File.Exists(path);
+        if (!allowMissing && !exists)
+            throw new FileNotFoundException("動画ファイルが見つかりません", path);
+
+        var item = new NetaItem
+        {
+            DisplayName = Path.GetFileNameWithoutExtension(path),
+            Path = path,
+            IsMissing = !exists
+        };
+        if (exists)
+            item.RefreshConvertState();
+        return item;
     }
 
     public async Task<IReadOnlyList<NetaItem>?> TryLoadSavedFolderAsync()
@@ -243,7 +308,7 @@ public sealed class EngineSession : IDisposable
 
                 ReleaseDisplayPair(standbySlot);
                 _displayPairs[standbySlot] = warmed;
-                WireDurationChanged(warmed);
+                WirePairEvents(warmed);
             }
             else
             {
@@ -263,8 +328,7 @@ public sealed class EngineSession : IDisposable
             {
                 var visible = _displayPairs[_visibleSlotIndex];
                 ResetPairToStart(visible);
-                ForcePausedFrameRefresh(visible.Operator, ClockRate);
-                ForcePausedFrameRefresh(visible.Clean, ClockRate);
+                ForcePausedFrameRefresh(visible.Player, ClockRate);
             }
 
             ApplyMutePolicy();
@@ -281,7 +345,7 @@ public sealed class EngineSession : IDisposable
             }
 
             _displayPairs[oldVisibleSlot] = new MediaPlayerPair();
-            WireDurationChanged(_displayPairs[oldVisibleSlot]);
+            WirePairEvents(_displayPairs[oldVisibleSlot]);
 
             VisibleSlotChanged?.Invoke(_visibleSlotIndex);
             SourceChanged?.Invoke();
@@ -314,8 +378,7 @@ public sealed class EngineSession : IDisposable
 
             try
             {
-                pair.Operator.Pause();
-                pair.Clean.Pause();
+                pair.Player.Pause();
                 pair.ClearSource();
             }
             catch
@@ -343,17 +406,14 @@ public sealed class EngineSession : IDisposable
         ClearStrokes();
         IsPlaying = true;
         ApplyMutePolicy();
-        SyncPositionFromOperator();
+        OperatorPlayer.PlaybackSession.PlaybackRate = ClockRate;
         OperatorPlayer.Play();
-        CleanPlayer.Play();
         PlaybackStateChanged?.Invoke();
     }
 
     public void Pause()
     {
         OperatorPlayer.Pause();
-        CleanPlayer.Pause();
-        SyncPositionFromOperator();
         IsPlaying = false;
         ApplyMutePolicy();
         PlaybackStateChanged?.Invoke();
@@ -375,8 +435,10 @@ public sealed class EngineSession : IDisposable
         ClockRate = rate;
         foreach (var pair in _displayPairs)
         {
-            pair.Operator.PlaybackSession.PlaybackRate = rate;
-            pair.Clean.PlaybackSession.PlaybackRate = rate;
+            if (_scrubPreviewActive && ReferenceEquals(pair, _displayPairs[_visibleSlotIndex]))
+                continue;
+
+            pair.Player.PlaybackSession.PlaybackRate = rate;
         }
 
         ApplyMutePolicy();
@@ -390,8 +452,7 @@ public sealed class EngineSession : IDisposable
 
     /// <summary>
     /// シークバードラッグ開始。ポーズ中の Position だけではコマが出ないため、
-    /// Operator だけ再生状態にしておく（Rate=0 で時間は進めない）。
-    /// Play/Pause 連打はシーク待ち行列を積み遅れが増えるので使わない。
+    /// Operator を Rate=0 で再生状態にする（時間は進めない）。
     /// </summary>
     public void BeginScrubPreview()
     {
@@ -404,7 +465,6 @@ public sealed class EngineSession : IDisposable
         try
         {
             MuteBothPlayers();
-            // Rate=0 で時間を止めつつ Playing にする（Position 変更でコマが出る）
             try
             {
                 OperatorPlayer.PlaybackSession.PlaybackRate = 0;
@@ -433,12 +493,7 @@ public sealed class EngineSession : IDisposable
         }
 
         _scrubPreviewActive = false;
-
-        if (finalPosition < TimeSpan.Zero)
-            finalPosition = TimeSpan.Zero;
-        var duration = TimelineDuration;
-        if (duration > TimeSpan.Zero && finalPosition > duration)
-            finalPosition = duration;
+        finalPosition = ClampPosition(finalPosition);
 
         try
         {
@@ -446,14 +501,8 @@ public sealed class EngineSession : IDisposable
             OperatorPlayer.Pause();
             OperatorPlayer.PlaybackSession.PlaybackRate = _scrubSavedRate;
             OperatorPlayer.PlaybackSession.Position = finalPosition;
-            CleanPlayer.PlaybackSession.PlaybackRate = _scrubSavedRate;
-            CleanPlayer.PlaybackSession.Position = finalPosition;
-            CleanPlayer.Pause();
             MuteBothPlayers();
-            // 離した瞬間の一瞬 Play は音漏れしやすいので使わない。
-            // Operator はドラッグ中 Rate=0 再生で既に当該コマが出ている。
-            // Clean は無音の Rate=0 フラッシュのみ。
-            ForcePausedFrameRefresh(CleanPlayer, restoreRate: _scrubSavedRate);
+            ForcePausedFrameRefresh(OperatorPlayer, restoreRate: _scrubSavedRate);
             MuteBothPlayers();
         }
         catch
@@ -466,19 +515,13 @@ public sealed class EngineSession : IDisposable
         PlaybackStateChanged?.Invoke();
     }
 
-    /// <summary>ドラッグ中プレビュー。Position のみ（Play/Pause しない）。</summary>
+    /// <summary>ドラッグ中プレビュー。Operator/Clean 両方の Position を更新。</summary>
     public void SeekPreview(TimeSpan position)
     {
         if (CurrentPath is null)
             return;
 
-        if (position < TimeSpan.Zero)
-            position = TimeSpan.Zero;
-
-        var duration = TimelineDuration;
-        if (duration > TimeSpan.Zero && position > duration)
-            position = duration;
-
+        position = ClampPosition(position);
         MuteBothPlayers();
         OperatorPlayer.PlaybackSession.Position = position;
         MuteBothPlayers();
@@ -490,8 +533,6 @@ public sealed class EngineSession : IDisposable
         {
             OperatorPlayer.IsMuted = true;
             OperatorPlayer.Volume = 0;
-            CleanPlayer.IsMuted = true;
-            CleanPlayer.Volume = 0;
         }
         catch
         {
@@ -514,6 +555,18 @@ public sealed class EngineSession : IDisposable
             return;
         }
 
+        position = ClampPosition(position);
+        OperatorPlayer.PlaybackSession.Position = position;
+        if (!IsPlaying && (syncClean || refreshOperatorFrame))
+            ForcePausedFrameRefresh(OperatorPlayer, ClockRate);
+
+        ApplyMutePolicy();
+        if (notifyTimeline)
+            TimelineChanged?.Invoke();
+    }
+
+    private TimeSpan ClampPosition(TimeSpan position)
+    {
         if (position < TimeSpan.Zero)
             position = TimeSpan.Zero;
 
@@ -521,21 +574,7 @@ public sealed class EngineSession : IDisposable
         if (duration > TimeSpan.Zero && position > duration)
             position = duration;
 
-        OperatorPlayer.PlaybackSession.Position = position;
-        if (syncClean)
-        {
-            CleanPlayer.PlaybackSession.Position = position;
-            if (!IsPlaying)
-                ForcePausedFrameRefresh(OperatorPlayer, ClockRate);
-        }
-        else if (refreshOperatorFrame && !IsPlaying)
-        {
-            ForcePausedFrameRefresh(OperatorPlayer, ClockRate);
-        }
-
-        ApplyMutePolicy();
-        if (notifyTimeline)
-            TimelineChanged?.Invoke();
+        return position;
     }
 
     public void BeginStroke(Color color, double thickness, Point point)
@@ -599,9 +638,25 @@ public sealed class EngineSession : IDisposable
         StrokesChanged?.Invoke();
     }
 
-    private void WireDurationChanged(MediaPlayerPair pair)
+    private void WirePairEvents(MediaPlayerPair pair)
     {
-        pair.Operator.PlaybackSession.NaturalDurationChanged += (_, _) => TimelineChanged?.Invoke();
+        if (pair.EventsWired)
+            return;
+
+        pair.EventsWired = true;
+        pair.Player.PlaybackSession.NaturalDurationChanged += (_, _) => TimelineChanged?.Invoke();
+        pair.Player.MediaEnded += OnOperatorMediaEnded;
+    }
+
+    private void OnOperatorMediaEnded(MediaPlayer sender, object args)
+    {
+        if (_disposed || !IsPlaying)
+            return;
+
+        if (!ReferenceEquals(sender, OperatorPlayer))
+            return;
+
+        Pause();
     }
 
     private void ReleaseDisplayPair(int slotIndex)
@@ -624,14 +679,10 @@ public sealed class EngineSession : IDisposable
     {
         try
         {
-            pair.Operator.Pause();
-            pair.Clean.Pause();
-            pair.Operator.IsMuted = true;
-            pair.Operator.Volume = 0;
-            pair.Clean.IsMuted = true;
-            pair.Clean.Volume = 0;
-            pair.Operator.PlaybackSession.Position = TimeSpan.Zero;
-            pair.Clean.PlaybackSession.Position = TimeSpan.Zero;
+            pair.Player.Pause();
+            pair.Player.IsMuted = true;
+            pair.Player.Volume = 0;
+            pair.Player.PlaybackSession.Position = TimeSpan.Zero;
         }
         catch
         {
@@ -646,38 +697,26 @@ public sealed class EngineSession : IDisposable
     {
         pair.ClearSource();
 
-        // ローカルファイルは URI より StorageFile の方が安定（パス文字・権限・コンテナ判定）
-        // .mov は変換済み mp4（キャッシュ）があればそちらを再生。元 .mov は残す。
         var playbackPath = MovTranscodeService.ResolvePlaybackPath(path);
         var file = await StorageFile.GetFileFromPathAsync(playbackPath);
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var opFail = AttachMediaFailed(pair.Operator, out var opError);
-        using var cleanFail = AttachMediaFailed(pair.Clean, out var cleanError);
+        using var fail = AttachMediaFailed(pair.Player, out var error);
 
-        pair.Operator.Source = MediaSource.CreateFromStorageFile(file);
-        pair.Clean.Source = MediaSource.CreateFromStorageFile(file);
+        pair.Player.Source = MediaSource.CreateFromStorageFile(file);
         pair.Path = path;
 
-        await WaitForOpenedAsync(pair.Operator, cancellationToken).ConfigureAwait(false);
-        cancellationToken.ThrowIfCancellationRequested();
-        await WaitForOpenedAsync(pair.Clean, cancellationToken).ConfigureAwait(false);
+        await WaitForOpenedAsync(pair.Player, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
 
-        ThrowIfMediaUnusable(pair.Operator, playbackPath, opError.Error);
-        ThrowIfMediaUnusable(pair.Clean, playbackPath, cleanError.Error);
+        ThrowIfMediaUnusable(pair.Player, playbackPath, error.Error);
 
-        pair.Operator.Pause();
-        pair.Clean.Pause();
-        pair.Operator.IsMuted = true;
-        pair.Operator.Volume = 0;
-        pair.Clean.IsMuted = true;
-        pair.Clean.Volume = 0;
-        pair.Operator.PlaybackSession.Position = TimeSpan.Zero;
-        pair.Clean.PlaybackSession.Position = TimeSpan.Zero;
+        pair.Player.Pause();
+        pair.Player.IsMuted = true;
+        pair.Player.Volume = 0;
+        pair.Player.PlaybackSession.Position = TimeSpan.Zero;
 
-        await PrimeFirstFrameAsync(pair.Operator, cancellationToken).ConfigureAwait(false);
-        await PrimeFirstFrameAsync(pair.Clean, cancellationToken).ConfigureAwait(false);
+        await PrimeFirstFrameAsync(pair.Player, cancellationToken).ConfigureAwait(false);
     }
 
     private sealed class MediaFailBox
@@ -774,22 +813,15 @@ public sealed class EngineSession : IDisposable
         }
     }
 
-    private void SyncPositionFromOperator()
-    {
-        CleanPlayer.PlaybackSession.Position = OperatorPlayer.PlaybackSession.Position;
-    }
-
     private void ApplyMutePolicy()
     {
-        // 停止中・スクラブ中は Clean もミュート。離した直後の unmute がクリック音の主因。
+        // 単一プレイヤー: 等速再生中だけ音声 ON（変速・スクラブ中はミュート）。
         var rateMute = Math.Abs(ClockRate - 1.0) > 0.001;
-        var muteClean = rateMute || !IsPlaying || _scrubPreviewActive;
+        var mute = rateMute || !IsPlaying || _scrubPreviewActive;
         foreach (var pair in _displayPairs)
         {
-            pair.Operator.IsMuted = true;
-            pair.Operator.Volume = 0;
-            pair.Clean.IsMuted = muteClean;
-            pair.Clean.Volume = muteClean ? 0 : 1.0;
+            pair.Player.IsMuted = mute;
+            pair.Player.Volume = mute ? 0 : 1.0;
         }
     }
 

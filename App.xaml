@@ -15,223 +15,193 @@
             <SolidColorBrush x:Key="OpPanelBorderBrush" Color="#FF334155" />
             <SolidColorBrush x:Key="OpTextBrush" Color="#FFE2E8F0" />
             <SolidColorBrush x:Key="OpMutedTextBrush" Color="#FF94A3B8" />
+            <!-- 暗いバー上でもボタンが浮いて見えるよう、面だけ明るく（枠線は使わずジャギ防止） -->
+            <SolidColorBrush x:Key="OpControlFillBrush" Color="#FF556A84" />
+            <SolidColorBrush x:Key="OpControlForegroundBrush" Color="#FFF8FAFC" />
+            <SolidColorBrush x:Key="OpControlFillDisabledBrush" Color="#FF2E3A4F" />
+            <SolidColorBrush x:Key="OpControlForegroundDisabledBrush" Color="#FF94A3B8" />
             <SolidColorBrush x:Key="PenSwatchRingOuterBrush" Color="#FFF8FAFC" />
             <SolidColorBrush x:Key="PenSwatchRingInnerBrush" Color="#FF38BDF8" />
 
-            <!-- OpToggle*: システム ThemeDictionary の ToggleButton* を避け、ボタン個別 Resources で上書き可能にする -->
-            <SolidColorBrush x:Key="OpToggleBackground" Color="#FFF8FAFC" />
-            <SolidColorBrush x:Key="OpToggleBackgroundPointerOver" Color="#FFE2E8F0" />
-            <SolidColorBrush x:Key="OpToggleBackgroundPressed" Color="#FFCBD5E1" />
-            <SolidColorBrush x:Key="OpToggleBackgroundChecked" Color="#FF0D9488" />
-            <SolidColorBrush x:Key="OpToggleBackgroundCheckedPointerOver" Color="#FF14B8A6" />
-            <SolidColorBrush x:Key="OpToggleBackgroundCheckedPressed" Color="#FF0F766E" />
-            <SolidColorBrush x:Key="OpToggleForeground" Color="#FF0F172A" />
-            <SolidColorBrush x:Key="OpToggleForegroundPointerOver" Color="#FF0F172A" />
-            <SolidColorBrush x:Key="OpToggleForegroundPressed" Color="#FF1E293B" />
-            <SolidColorBrush x:Key="OpToggleForegroundChecked" Color="#FFFFFFFF" />
-            <SolidColorBrush x:Key="OpToggleForegroundCheckedPointerOver" Color="#FFFFFFFF" />
-            <SolidColorBrush x:Key="OpToggleForegroundCheckedPressed" Color="#FFFFFFFF" />
-            <SolidColorBrush x:Key="OpToggleBorderBrush" Color="#FF475569" />
-            <SolidColorBrush x:Key="OpToggleBorderBrushPointerOver" Color="#FF334155" />
-            <SolidColorBrush x:Key="OpToggleBorderBrushPressed" Color="#FF64748B" />
-            <SolidColorBrush x:Key="OpToggleBorderBrushChecked" Color="#FF0F766E" />
-            <SolidColorBrush x:Key="OpToggleBorderBrushCheckedPointerOver" Color="#FF0F766E" />
-            <SolidColorBrush x:Key="OpToggleBorderBrushCheckedPressed" Color="#FF115E59" />
+            <!-- 角丸＋1px枠はジャギりやすいので、枠なしの面だけテンプレ -->
+            <ControlTemplate x:Key="OpButtonChromeTemplate" TargetType="Button">
+                <Grid x:Name="RootGrid" Background="Transparent">
+                    <Border
+                        x:Name="BackgroundElement"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch"
+                        Background="{TemplateBinding Background}"
+                        BorderThickness="0"
+                        CornerRadius="{TemplateBinding CornerRadius}">
+                        <Grid>
+                            <ContentPresenter
+                                x:Name="ContentPresenter"
+                                Padding="{TemplateBinding Padding}"
+                                HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                Content="{TemplateBinding Content}"
+                                ContentTemplate="{TemplateBinding ContentTemplate}"
+                                AutomationProperties.AccessibilityView="Raw"
+                                Foreground="{TemplateBinding Foreground}" />
+                            <Border
+                                x:Name="HoverOverlay"
+                                Background="White"
+                                Opacity="0"
+                                CornerRadius="{TemplateBinding CornerRadius}"
+                                IsHitTestVisible="False" />
+                        </Grid>
+                    </Border>
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup x:Name="CommonStates">
+                            <VisualState x:Name="Normal" />
+                            <VisualState x:Name="PointerOver">
+                                <VisualState.Setters>
+                                    <Setter Target="HoverOverlay.Opacity" Value="0.12" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Pressed">
+                                <VisualState.Setters>
+                                    <Setter Target="HoverOverlay.Opacity" Value="0.22" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Disabled">
+                                <VisualState.Setters>
+                                    <Setter Target="RootGrid.Opacity" Value="0.5" />
+                                </VisualState.Setters>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+                </Grid>
+            </ControlTemplate>
 
-            <Style x:Key="FlatButtonChromeStyle" TargetType="Button">
-                <Setter Property="FontWeight" Value="SemiBold" />
-                <Setter Property="CornerRadius" Value="0" />
-                <Setter Property="Foreground" Value="#FF0F172A" />
-                <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="Padding" Value="8,6" />
-                <Setter Property="HorizontalContentAlignment" Value="Center" />
-                <Setter Property="VerticalContentAlignment" Value="Center" />
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="Button">
-                            <!-- VSM はテンプレート直下（ルート）に置く。子から親 OuterRim を触ると効かない -->
-                            <Grid x:Name="RootLayout">
-                                <VisualStateManager.VisualStateGroups>
-                                    <VisualStateGroup x:Name="CommonStates">
-                                        <VisualState x:Name="Normal">
-                                            <VisualState.Setters>
-                                                <Setter Target="FaceOffset.Y" Value="0" />
-                                                <Setter Target="ShadowPlate.Opacity" Value="1" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="PointerOver">
-                                            <VisualState.Setters>
-                                                <Setter Target="FaceOffset.Y" Value="2" />
-                                                <Setter Target="ShadowPlate.Opacity" Value="0.85" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Pressed">
-                                            <VisualState.Setters>
-                                                <Setter Target="FaceOffset.Y" Value="4" />
-                                                <Setter Target="ShadowPlate.Opacity" Value="0.55" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Disabled">
-                                            <VisualState.Setters>
-                                                <Setter Target="RootLayout.Opacity" Value="0.55" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                    </VisualStateGroup>
-                                </VisualStateManager.VisualStateGroups>
-
-                                <!-- 下の段差（凹みの「床」） -->
-                                <Border
-                                    x:Name="ShadowPlate"
-                                    Background="{TemplateBinding BorderBrush}"
-                                    CornerRadius="{TemplateBinding CornerRadius}"
-                                    Margin="0,4,0,0" />
-
-                                <!-- 面：ホバー／押下で下へ移動して沈む -->
-                                <Border
-                                    x:Name="RootBorder"
-                                    Background="{TemplateBinding Background}"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="2"
-                                    CornerRadius="{TemplateBinding CornerRadius}"
-                                    Margin="0,0,0,4">
-                                    <Border.RenderTransform>
-                                        <TranslateTransform x:Name="FaceOffset" Y="0" />
-                                    </Border.RenderTransform>
-                                    <ContentPresenter
-                                        x:Name="ContentPresenter"
-                                        Padding="{TemplateBinding Padding}"
-                                        HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                        VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
-                                        Content="{TemplateBinding Content}"
-                                        ContentTemplate="{TemplateBinding ContentTemplate}"
-                                        Foreground="{TemplateBinding Foreground}" />
-                                </Border>
-                            </Grid>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
-            </Style>
-
-            <Style x:Key="FlatToggleButtonChromeStyle" TargetType="ToggleButton">
-                <Setter Property="FontWeight" Value="SemiBold" />
-                <Setter Property="CornerRadius" Value="0" />
-                <Setter Property="Foreground" Value="#FF0F172A" />
-                <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="Padding" Value="0" />
-                <Setter Property="HorizontalContentAlignment" Value="Center" />
-                <Setter Property="VerticalContentAlignment" Value="Center" />
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="ToggleButton">
-                            <Grid x:Name="RootLayout">
-                                <VisualStateManager.VisualStateGroups>
-                                    <VisualStateGroup x:Name="CommonStates">
-                                        <VisualState x:Name="Normal">
-                                            <VisualState.Setters>
-                                                <Setter Target="FaceOffset.Y" Value="0" />
-                                                <Setter Target="ShadowPlate.Opacity" Value="1" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="PointerOver">
-                                            <VisualState.Setters>
-                                                <Setter Target="FaceOffset.Y" Value="2" />
-                                                <Setter Target="ShadowPlate.Opacity" Value="0.85" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Pressed">
-                                            <VisualState.Setters>
-                                                <Setter Target="FaceOffset.Y" Value="4" />
-                                                <Setter Target="ShadowPlate.Opacity" Value="0.55" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Disabled">
-                                            <VisualState.Setters>
-                                                <Setter Target="RootLayout.Opacity" Value="0.55" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Checked">
-                                            <VisualState.Setters>
-                                                <Setter Target="FaceOffset.Y" Value="0" />
-                                                <Setter Target="ShadowPlate.Opacity" Value="1" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="CheckedPointerOver">
-                                            <VisualState.Setters>
-                                                <Setter Target="FaceOffset.Y" Value="2" />
-                                                <Setter Target="ShadowPlate.Opacity" Value="0.85" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="CheckedPressed">
-                                            <VisualState.Setters>
-                                                <Setter Target="FaceOffset.Y" Value="4" />
-                                                <Setter Target="ShadowPlate.Opacity" Value="0.55" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="CheckedDisabled" />
-                                        <VisualState x:Name="Indeterminate" />
-                                        <VisualState x:Name="IndeterminatePointerOver" />
-                                        <VisualState x:Name="IndeterminatePressed" />
-                                        <VisualState x:Name="IndeterminateDisabled" />
-                                    </VisualStateGroup>
-                                </VisualStateManager.VisualStateGroups>
-
-                                <Border
-                                    x:Name="ShadowPlate"
-                                    Background="{TemplateBinding BorderBrush}"
-                                    CornerRadius="{TemplateBinding CornerRadius}"
-                                    Margin="0,4,0,0" />
-
-                                <Border
-                                    x:Name="RootBorder"
-                                    Background="{TemplateBinding Background}"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="2"
-                                    CornerRadius="{TemplateBinding CornerRadius}"
-                                    Margin="0,0,0,4">
-                                    <Border.RenderTransform>
-                                        <TranslateTransform x:Name="FaceOffset" Y="0" />
-                                    </Border.RenderTransform>
-                                    <ContentPresenter
-                                        x:Name="ContentPresenter"
-                                        Padding="{TemplateBinding Padding}"
-                                        HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                        VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
-                                        Content="{TemplateBinding Content}"
-                                        ContentTemplate="{TemplateBinding ContentTemplate}"
-                                        Foreground="{TemplateBinding Foreground}" />
-                                </Border>
-                            </Grid>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
-            </Style>
+            <ControlTemplate x:Key="OpToggleChromeTemplate" TargetType="ToggleButton">
+                <Grid x:Name="RootGrid" Background="Transparent">
+                    <Border
+                        x:Name="BackgroundElement"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch"
+                        Background="{TemplateBinding Background}"
+                        BorderThickness="0"
+                        CornerRadius="{TemplateBinding CornerRadius}">
+                        <Grid>
+                            <ContentPresenter
+                                x:Name="ContentPresenter"
+                                Padding="{TemplateBinding Padding}"
+                                HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                Content="{TemplateBinding Content}"
+                                ContentTemplate="{TemplateBinding ContentTemplate}"
+                                AutomationProperties.AccessibilityView="Raw"
+                                Foreground="{TemplateBinding Foreground}" />
+                            <Border
+                                x:Name="HoverOverlay"
+                                Background="White"
+                                Opacity="0"
+                                CornerRadius="{TemplateBinding CornerRadius}"
+                                IsHitTestVisible="False" />
+                        </Grid>
+                    </Border>
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup x:Name="CommonStates">
+                            <VisualState x:Name="Normal" />
+                            <VisualState x:Name="PointerOver">
+                                <VisualState.Setters>
+                                    <Setter Target="HoverOverlay.Opacity" Value="0.12" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Pressed">
+                                <VisualState.Setters>
+                                    <Setter Target="HoverOverlay.Opacity" Value="0.22" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Disabled">
+                                <VisualState.Setters>
+                                    <Setter Target="RootGrid.Opacity" Value="0.5" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Checked">
+                                <VisualState.Setters>
+                                    <Setter Target="HoverOverlay.Opacity" Value="0.08" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="CheckedPointerOver">
+                                <VisualState.Setters>
+                                    <Setter Target="HoverOverlay.Opacity" Value="0.16" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="CheckedPressed">
+                                <VisualState.Setters>
+                                    <Setter Target="HoverOverlay.Opacity" Value="0.24" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="CheckedDisabled">
+                                <VisualState.Setters>
+                                    <Setter Target="RootGrid.Opacity" Value="0.5" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Indeterminate" />
+                            <VisualState x:Name="IndeterminatePointerOver" />
+                            <VisualState x:Name="IndeterminatePressed" />
+                            <VisualState x:Name="IndeterminateDisabled" />
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+                </Grid>
+            </ControlTemplate>
 
             <Style
                 x:Key="OpButtonStyle"
-                TargetType="Button"
-                BasedOn="{StaticResource FlatButtonChromeStyle}">
-                <Setter Property="Background" Value="#FFF8FAFC" />
-                <Setter Property="Foreground" Value="#FF0F172A" />
-                <Setter Property="FontSize" Value="20" />
-                <Setter Property="Padding" Value="18,12" />
+                TargetType="Button">
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="FontSize" Value="18" />
+                <Setter Property="Padding" Value="12,4" />
                 <Setter Property="MinHeight" Value="48" />
                 <Setter Property="MinWidth" Value="88" />
-                <Setter Property="CornerRadius" Value="0" />
-                <Setter Property="BorderBrush" Value="#FF475569" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Background" Value="{StaticResource OpControlFillBrush}" />
+                <Setter Property="Foreground" Value="{StaticResource OpControlForegroundBrush}" />
+                <Setter Property="Template" Value="{StaticResource OpButtonChromeTemplate}" />
+            </Style>
+
+            <Style
+                x:Key="OpButtonCompactStyle"
+                TargetType="Button"
+                BasedOn="{StaticResource OpButtonStyle}">
+                <Setter Property="MinWidth" Value="48" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="FontSize" Value="18" />
+            </Style>
+
+            <!-- ツールバー右端：編集・設定を縦2段に収める小さめボタン -->
+            <Style
+                x:Key="OpButtonSideStyle"
+                TargetType="Button"
+                BasedOn="{StaticResource OpButtonStyle}">
+                <Setter Property="FontSize" Value="14" />
+                <Setter Property="Padding" Value="8,2" />
+                <Setter Property="MinHeight" Value="34" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="Width" Value="84" />
+                <Setter Property="CornerRadius" Value="6" />
             </Style>
 
             <Style
                 x:Key="OpToggleStyle"
-                TargetType="ToggleButton"
-                BasedOn="{StaticResource FlatToggleButtonChromeStyle}">
-                <Setter Property="Background" Value="#FFF8FAFC" />
-                <Setter Property="Foreground" Value="#FF0F172A" />
-                <Setter Property="FontSize" Value="20" />
-                <Setter Property="Padding" Value="18,12" />
+                TargetType="ToggleButton">
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="FontSize" Value="18" />
+                <Setter Property="Padding" Value="12,4" />
                 <Setter Property="MinHeight" Value="48" />
                 <Setter Property="MinWidth" Value="88" />
-                <Setter Property="CornerRadius" Value="0" />
-                <Setter Property="BorderBrush" Value="#FF475569" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Background" Value="{StaticResource OpControlFillBrush}" />
+                <Setter Property="Foreground" Value="{StaticResource OpControlForegroundBrush}" />
+                <Setter Property="Template" Value="{StaticResource OpToggleChromeTemplate}" />
             </Style>
 
             <Style x:Key="NetaListItemContainerStyle" TargetType="ListViewItem">
@@ -275,12 +245,49 @@
                                             </VisualState.Setters>
                                         </VisualState>
                                     </VisualStateGroup>
+                                    <VisualStateGroup x:Name="DragStates">
+                                        <VisualState x:Name="NotDragging" />
+                                        <VisualState x:Name="Dragging">
+                                            <VisualState.Setters>
+                                                <Setter Target="Root.Opacity" Value="0.55" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="DraggingTarget" />
+                                        <VisualState x:Name="MultipleDraggingPrimary" />
+                                        <VisualState x:Name="MultipleDraggingSecondary" />
+                                        <VisualState x:Name="DraggedPlaceholder" />
+                                        <VisualState x:Name="ReorderedPlaceholder">
+                                            <VisualState.Setters>
+                                                <Setter Target="Root.Opacity" Value="0" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                    <VisualStateGroup x:Name="ReorderHintStates">
+                                        <VisualState x:Name="NoReorderHint" />
+                                        <VisualState x:Name="BottomReorderHint">
+                                            <VisualState.Setters>
+                                                <Setter Target="ReorderHintBorder.BorderThickness" Value="0,0,0,3" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="TopReorderHint">
+                                            <VisualState.Setters>
+                                                <Setter Target="ReorderHintBorder.BorderThickness" Value="0,3,0,0" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="LeftReorderHint" />
+                                        <VisualState x:Name="RightReorderHint" />
+                                    </VisualStateGroup>
                                 </VisualStateManager.VisualStateGroups>
-                                <ContentPresenter
-                                    HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                    VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
-                                    Content="{TemplateBinding Content}"
-                                    ContentTemplate="{TemplateBinding ContentTemplate}" />
+                                <Border
+                                    x:Name="ReorderHintBorder"
+                                    BorderBrush="#FF2DD4BF"
+                                    BorderThickness="0">
+                                    <ContentPresenter
+                                        HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                        VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                        Content="{TemplateBinding Content}"
+                                        ContentTemplate="{TemplateBinding ContentTemplate}" />
+                                </Border>
                             </Grid>
                         </ControlTemplate>
                     </Setter.Value>
@@ -294,14 +301,14 @@
                 <Setter Property="Padding" Value="0" />
                 <Setter Property="MinWidth" Value="0" />
                 <Setter Property="MinHeight" Value="0" />
-                <Setter Property="Width" Value="44" />
-                <Setter Property="Height" Value="44" />
+                <Setter Property="Width" Value="48" />
+                <Setter Property="Height" Value="48" />
                 <Setter Property="HorizontalContentAlignment" Value="Center" />
                 <Setter Property="VerticalContentAlignment" Value="Center" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="ToggleButton">
-                            <Grid Width="44" Height="44" Background="Transparent">
+                            <Grid Width="48" Height="48" Background="Transparent">
                                 <VisualStateManager.VisualStateGroups>
                                     <VisualStateGroup x:Name="CommonStates">
                                         <VisualState x:Name="Normal">
