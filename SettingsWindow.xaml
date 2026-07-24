@@ -69,6 +69,53 @@
                         Foreground="#FF94A3B8"
                         FontSize="13"
                         TextWrapping="Wrap" />
+
+                    <TextBlock
+                        Margin="0,8,0,0"
+                        FontSize="16"
+                        FontWeight="SemiBold"
+                        Foreground="#FFF8FAFC"
+                        Text="更新履歴" />
+                    <TextBlock
+                        x:Name="ReleaseNotesStatusText"
+                        Foreground="#FF94A3B8"
+                        FontSize="13"
+                        TextWrapping="Wrap"
+                        Text="GitHub から読み込み中..." />
+                    <ItemsControl x:Name="ReleaseNotesList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border
+                                    Margin="0,0,0,12"
+                                    Padding="14"
+                                    Background="#FF020617"
+                                    BorderBrush="#FF334155"
+                                    BorderThickness="1"
+                                    CornerRadius="8">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock
+                                            FontSize="15"
+                                            FontWeight="SemiBold"
+                                            Foreground="#FFF8FAFC"
+                                            Text="{Binding Title}"
+                                            TextWrapping="Wrap" />
+                                        <TextBlock
+                                            FontSize="12"
+                                            Foreground="#FF94A3B8"
+                                            Text="{Binding PublishedLabel}"
+                                            TextWrapping="Wrap" />
+                                        <TextBlock
+                                            FontSize="13"
+                                            Foreground="#FFE2E8F0"
+                                            LineHeight="20"
+                                            Text="{Binding Body}"
+                                            TextWrapping="Wrap"
+                                            IsTextSelectionEnabled="True" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
 
                 <StackPanel x:Name="PanelDemo" Spacing="16" Visibility="Collapsed">
@@ -274,6 +321,13 @@
                                 <TextBlock VerticalAlignment="Center" Text="ペン3" />
                             </StackPanel>
                         </Button>
+                        <Button
+                            x:Name="ResetPenColorsBtn"
+                            MinWidth="160"
+                            MinHeight="48"
+                            Padding="12,8"
+                            Content="デフォルトに戻す"
+                            Click="OnResetPenColorsClick" />
                     </StackPanel>
 
                     <Border

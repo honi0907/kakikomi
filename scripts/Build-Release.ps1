@@ -1,11 +1,18 @@
 param(
     [switch]$DryRun,
-    [switch]$SkipGitHub
+    [switch]$SkipGitHub,
+    [string]$NotesFile
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
+
+# gh へ渡す日本語 notes は UTF-8 ファイル経由にする（here-string 直渡しは CP932 で文字化けする）
+function Write-Utf8NoBom([string]$Path, [string]$Content) {
+    $encoding = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($Path, $Content, $encoding)
+}
 
 Write-Host "== Build portable =="
 & (Join-Path $root "scripts\Build-Portable.ps1")
@@ -56,11 +63,12 @@ if ($LASTEXITCODE -eq 0 -and $existing) {
     throw "Release $tag already exists. Bump version or delete the release first."
 }
 
-gh release create $tag `
-    $setup `
-    $portable `
-    --title "Kakikomi v$version" `
-    --notes @"
+$notesPath = Join-Path $env:TEMP "kakikomi-release-notes-$version.md"
+if ($NotesFile -and (Test-Path $NotesFile)) {
+    Copy-Item -LiteralPath $NotesFile -Destination $notesPath -Force
+}
+else {
+    $defaultNotes = @"
 ## Kakikomi v$version
 
 - Setup インストーラー（オンライン更新用）
@@ -68,6 +76,14 @@ gh release create $tag `
 
 インストール後、設定の「オンライン更新を確認」から更新できます。
 "@
+    Write-Utf8NoBom $notesPath $defaultNotes
+}
+
+gh release create $tag `
+    $setup `
+    $portable `
+    --title "Kakikomi v$version" `
+    --notes-file $notesPath
 
 Write-Host "Release created: $tag"
 exit 0

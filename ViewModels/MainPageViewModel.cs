@@ -925,6 +925,13 @@ public partial class MainPageViewModel : ObservableObject
             return;
         }
 
+        // 編集モード OFF（本番オペ中）は変換ダイアログを出さない
+        if (!IsEditMode)
+        {
+            _session.ScheduleWarmAll(items.Select(i => i.Path).ToList());
+            return;
+        }
+
         if (MovTranscodeService.FindFfmpegPath() is null)
         {
             StatusText = $".mov が {pending.Count} 本ありますが、ffmpeg が無いため変換できません";
@@ -971,8 +978,16 @@ public partial class MainPageViewModel : ObservableObject
 
         if (MovTranscodeService.FindFfmpegPath() is null)
         {
-            StatusText = "ffmpeg が無いため .mov を変換できません";
+            if (IsEditMode)
+                StatusText = "ffmpeg が無いため .mov を変換できません";
             return false;
+        }
+
+        // 編集モード OFF は確認ダイアログなしで変換（本番中に通知を出さない）
+        if (!IsEditMode)
+        {
+            await RunMovConvertAsync([path]);
+            return !MovTranscodeService.NeedsConvert(path);
         }
 
         var xamlRoot = App.Window?.Content?.XamlRoot;

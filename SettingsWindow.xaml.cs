@@ -14,6 +14,8 @@ public sealed partial class SettingsWindow : Window
 {
     private bool _loadingUi;
     private int _editingPenSlot; // 1/2/3, 0=閉じ
+    private CancellationTokenSource? _releaseNotesCts;
+    private bool _releaseNotesLoaded;
 
     public SettingsWindow()
     {
@@ -189,6 +191,7 @@ public sealed partial class SettingsWindow : Window
         StyleActionButton(Pen1SwatchBtn);
         StyleActionButton(Pen2SwatchBtn);
         StyleActionButton(Pen3SwatchBtn);
+        StyleActionButton(ResetPenColorsBtn);
         StyleActionButton(CloseColorEditorBtn);
     }
 
@@ -334,6 +337,17 @@ public sealed partial class SettingsWindow : Window
     private void OnPen2SwatchClick(object sender, RoutedEventArgs e) => OpenColorEditor(2);
     private void OnPen3SwatchClick(object sender, RoutedEventArgs e) => OpenColorEditor(3);
     private void OnCloseColorEditorClick(object sender, RoutedEventArgs e) => CloseColorEditor();
+
+    private void OnResetPenColorsClick(object sender, RoutedEventArgs e)
+    {
+        AppSettings.ResetPenColorsToDefault();
+        SetSwatch(SwatchRed, AppSettings.PenRed);
+        SetSwatch(SwatchGreen, AppSettings.PenGreen);
+        SetSwatch(SwatchBlue, AppSettings.PenBlue);
+
+        if (_editingPenSlot is 1 or 2 or 3)
+            OpenColorEditor(_editingPenSlot);
+    }
 
     private void OpenColorEditor(int slot)
     {
@@ -482,12 +496,52 @@ public sealed partial class SettingsWindow : Window
         if (tag == "Demo")
             RefreshDemoPanel();
         if (tag == "Version")
+        {
             VersionInfoText.Text = $"Kakikomi v{AppVersionReader.GetCurrentVersion()}";
+            _ = LoadReleaseNotesAsync();
+        }
         if (tag == "Palette")
         {
             SetSwatch(SwatchRed, AppSettings.PenRed);
             SetSwatch(SwatchGreen, AppSettings.PenGreen);
             SetSwatch(SwatchBlue, AppSettings.PenBlue);
+        }
+    }
+
+    private async Task LoadReleaseNotesAsync()
+    {
+        if (_releaseNotesLoaded && ReleaseNotesList.ItemsSource is not null)
+            return;
+
+        _releaseNotesCts?.Cancel();
+        _releaseNotesCts = new CancellationTokenSource();
+        var token = _releaseNotesCts.Token;
+
+        ReleaseNotesStatusText.Text = "GitHub から読み込み中...";
+        ReleaseNotesList.ItemsSource = null;
+
+        try
+        {
+            var entries = await ReleaseNotesService.LoadAsync(cancellationToken: token);
+            token.ThrowIfCancellationRequested();
+
+            if (entries.Count == 0)
+            {
+                ReleaseNotesStatusText.Text = "Release が見つかりませんでした。";
+                return;
+            }
+
+            ReleaseNotesList.ItemsSource = entries;
+            ReleaseNotesStatusText.Text = $"GitHub Release（{entries.Count} 件）";
+            _releaseNotesLoaded = true;
+        }
+        catch (OperationCanceledException)
+        {
+            // 別パネルへ切り替えた等
+        }
+        catch (Exception ex)
+        {
+            ReleaseNotesStatusText.Text = $"更新履歴を取得できませんでした: {ex.Message}";
         }
     }
 

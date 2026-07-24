@@ -1,31 +1,30 @@
-using Windows.Foundation.Collections;
-using Windows.Storage;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Windows.UI;
 
 namespace Kakikomi.Services;
 
 /// <summary>
-/// アプリ設定の読み書き（LocalSettings）。
+/// アプリ設定の読み書き。
+/// アンパッケージ（ポータブル）でも確実に残るよう、
+/// %LocalAppData%\Kakikomi\settings.json に保存する。
 /// </summary>
 public static class AppSettings
 {
-    private const string KeyPenRed = "PenColorRed";
-    private const string KeyPenGreen = "PenColorGreen";
-    private const string KeyPenBlue = "PenColorBlue";
-    private const string KeyPenThickness = "PenThickness";
-    private const string KeyEraserThickness = "EraserThickness";
-    private const string KeyLaunchFullSize = "LaunchControlPanelFullSize";
-    private const string KeyDemoMode = "DemoMode";
-    private const string KeyResumePlayback = "ResumePlayback";
+    private const string FileName = "settings.json";
 
     /// <summary>DEMO モード解除用パスワード。</summary>
     public const string DemoUnlockPassword = "incre1881";
 
     public static event Action? Changed;
 
-    public static Color PenRed { get; private set; } = Color.FromArgb(255, 239, 68, 68);
-    public static Color PenGreen { get; private set; } = Color.FromArgb(255, 34, 197, 94);
-    public static Color PenBlue { get; private set; } = Color.FromArgb(255, 59, 130, 246);
+    public static Color DefaultPenRed { get; } = Color.FromArgb(255, 239, 68, 68);
+    public static Color DefaultPenGreen { get; } = Color.FromArgb(255, 34, 197, 94);
+    public static Color DefaultPenBlue { get; } = Color.FromArgb(255, 59, 130, 246);
+
+    public static Color PenRed { get; private set; } = DefaultPenRed;
+    public static Color PenGreen { get; private set; } = DefaultPenGreen;
+    public static Color PenBlue { get; private set; } = DefaultPenBlue;
     public static double PenThickness { get; private set; } = 8;
     public static double EraserThickness { get; private set; } = 28;
     public static bool LaunchControlPanelFullSize { get; private set; }
@@ -39,74 +38,110 @@ public static class AppSettings
     /// <summary>既定 ON。解除パスワードで OFF にできる。</summary>
     public static bool DemoMode { get; private set; } = true;
 
+    private static string StorePath =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Kakikomi",
+            FileName);
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
     public static void Load()
     {
         try
         {
-            var values = ApplicationData.Current.LocalSettings.Values;
-            PenRed = ReadColor(values, KeyPenRed, PenRed);
-            PenGreen = ReadColor(values, KeyPenGreen, PenGreen);
-            PenBlue = ReadColor(values, KeyPenBlue, PenBlue);
-            PenThickness = ReadDouble(values, KeyPenThickness, 8);
-            EraserThickness = ReadDouble(values, KeyEraserThickness, 28);
-            LaunchControlPanelFullSize = ReadBool(values, KeyLaunchFullSize, false);
-            // 未保存時は既定 OFF（戻ると先頭から）
-            ResumePlayback = ReadBool(values, KeyResumePlayback, false);
-            // 未保存時は既定 ON
-            DemoMode = ReadBool(values, KeyDemoMode, true);
+            if (!File.Exists(StorePath))
+                return;
+
+            var dto = JsonSerializer.Deserialize<SettingsDto>(File.ReadAllText(StorePath), JsonOptions);
+            if (dto is null)
+                return;
+
+            if (TryParseColorHex(dto.PenRed, out var red))
+                PenRed = Unpack(red);
+            if (TryParseColorHex(dto.PenGreen, out var green))
+                PenGreen = Unpack(green);
+            if (TryParseColorHex(dto.PenBlue, out var blue))
+                PenBlue = Unpack(blue);
+
+            if (dto.PenThickness is { } penT)
+                PenThickness = Math.Clamp(penT, 1, 40);
+            if (dto.EraserThickness is { } eraserT)
+                EraserThickness = Math.Clamp(eraserT, 4, 80);
+            if (dto.LaunchControlPanelFullSize is { } full)
+                LaunchControlPanelFullSize = full;
+            if (dto.ResumePlayback is { } resume)
+                ResumePlayback = resume;
+            if (dto.DemoMode is { } demo)
+                DemoMode = demo;
         }
         catch
         {
-            // LocalSettings が使えない環境でも既定値で動かす
+            // 読めなくても既定値で動かす
         }
     }
 
     public static void SetPenRed(Color color)
     {
         PenRed = color;
-        WriteColor(KeyPenRed, color);
+        Persist();
         Changed?.Invoke();
     }
 
     public static void SetPenGreen(Color color)
     {
         PenGreen = color;
-        WriteColor(KeyPenGreen, color);
+        Persist();
         Changed?.Invoke();
     }
 
     public static void SetPenBlue(Color color)
     {
         PenBlue = color;
-        WriteColor(KeyPenBlue, color);
+        Persist();
+        Changed?.Invoke();
+    }
+
+    /// <summary>ペン1〜3を既定の赤・緑・青に戻す。</summary>
+    public static void ResetPenColorsToDefault()
+    {
+        PenRed = DefaultPenRed;
+        PenGreen = DefaultPenGreen;
+        PenBlue = DefaultPenBlue;
+        Persist();
         Changed?.Invoke();
     }
 
     public static void SetPenThickness(double thickness)
     {
         PenThickness = Math.Clamp(thickness, 1, 40);
-        WriteDouble(KeyPenThickness, PenThickness);
+        Persist();
         Changed?.Invoke();
     }
 
     public static void SetEraserThickness(double thickness)
     {
         EraserThickness = Math.Clamp(thickness, 4, 80);
-        WriteDouble(KeyEraserThickness, EraserThickness);
+        Persist();
         Changed?.Invoke();
     }
 
     public static void SetLaunchControlPanelFullSize(bool enabled)
     {
         LaunchControlPanelFullSize = enabled;
-        WriteBool(KeyLaunchFullSize, enabled);
+        Persist();
         Changed?.Invoke();
     }
 
     public static void SetResumePlayback(bool enabled)
     {
         ResumePlayback = enabled;
-        WriteBool(KeyResumePlayback, enabled);
+        Persist();
         Changed?.Invoke();
     }
 
@@ -122,94 +157,73 @@ public static class AppSettings
     public static void SetDemoMode(bool enabled)
     {
         DemoMode = enabled;
-        WriteBool(KeyDemoMode, enabled);
+        Persist();
         Changed?.Invoke();
     }
 
-    private static bool ReadBool(IPropertySet values, string key, bool fallback)
-    {
-        if (!values.TryGetValue(key, out var raw) || raw is null)
-            return fallback;
-
-        return raw switch
-        {
-            bool b => b,
-            byte by => by != 0,
-            short s => s != 0,
-            int i => i != 0,
-            long l => l != 0,
-            float f => Math.Abs(f) > float.Epsilon,
-            double d => Math.Abs(d) > double.Epsilon,
-            string str when bool.TryParse(str, out var parsed) => parsed,
-            string str when int.TryParse(str, out var n) => n != 0,
-            _ => fallback
-        };
-    }
-
-    private static void WriteBool(string key, bool value)
+    private static void Persist()
     {
         try
         {
-            // bool のまま保存（読み出しは型ゆれも許容）
-            ApplicationData.Current.LocalSettings.Values[key] = value;
+            var dir = Path.GetDirectoryName(StorePath);
+            if (!string.IsNullOrEmpty(dir))
+                Directory.CreateDirectory(dir);
+
+            var dto = new SettingsDto
+            {
+                PenRed = ToHex(PenRed),
+                PenGreen = ToHex(PenGreen),
+                PenBlue = ToHex(PenBlue),
+                PenThickness = PenThickness,
+                EraserThickness = EraserThickness,
+                LaunchControlPanelFullSize = LaunchControlPanelFullSize,
+                ResumePlayback = ResumePlayback,
+                DemoMode = DemoMode
+            };
+
+            File.WriteAllText(StorePath, JsonSerializer.Serialize(dto, JsonOptions));
         }
         catch
         {
-            // ignore
+            // 永続化失敗でも実行中の設定は維持
         }
     }
 
-    private static Color ReadColor(IPropertySet values, string key, Color fallback)
-    {
-        if (!values.TryGetValue(key, out var raw) || raw is not uint packed)
-            return fallback;
+    private static string ToHex(Color color) =>
+        $"#{color.A:X2}{color.R:X2}{color.G:X2}{color.B:X2}";
 
-        return Color.FromArgb(
+    private static Color Unpack(uint packed) =>
+        Color.FromArgb(
             (byte)((packed >> 24) & 0xFF),
             (byte)((packed >> 16) & 0xFF),
             (byte)((packed >> 8) & 0xFF),
             (byte)(packed & 0xFF));
+
+    private static bool TryParseColorHex(string? s, out uint packed)
+    {
+        packed = 0;
+        if (string.IsNullOrWhiteSpace(s))
+            return false;
+
+        var hex = s.Trim();
+        if (hex.StartsWith('#'))
+            hex = hex[1..];
+        if (hex.Length is not (6 or 8))
+            return false;
+        if (hex.Length == 6)
+            hex = "FF" + hex;
+        return uint.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out packed);
     }
 
-    private static void WriteColor(string key, Color color)
+    private sealed class SettingsDto
     {
-        try
-        {
-            uint packed = ((uint)color.A << 24)
-                | ((uint)color.R << 16)
-                | ((uint)color.G << 8)
-                | color.B;
-            ApplicationData.Current.LocalSettings.Values[key] = packed;
-        }
-        catch
-        {
-            // ignore
-        }
-    }
-
-    private static double ReadDouble(IPropertySet values, string key, double fallback)
-    {
-        if (!values.TryGetValue(key, out var raw))
-            return fallback;
-
-        return raw switch
-        {
-            double d => d,
-            float f => f,
-            int i => i,
-            _ => fallback
-        };
-    }
-
-    private static void WriteDouble(string key, double value)
-    {
-        try
-        {
-            ApplicationData.Current.LocalSettings.Values[key] = value;
-        }
-        catch
-        {
-            // ignore
-        }
+        public string? PenRed { get; set; }
+        public string? PenGreen { get; set; }
+        public string? PenBlue { get; set; }
+        public double? PenThickness { get; set; }
+        public double? EraserThickness { get; set; }
+        public bool? LaunchControlPanelFullSize { get; set; }
+        public bool? ResumePlayback { get; set; }
+        public bool? DemoMode { get; set; }
     }
 }
