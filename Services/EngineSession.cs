@@ -42,6 +42,10 @@ public sealed class EngineSession : IDisposable
     public event Action? SourceChanged;
     public event Action? PlaybackStateChanged;
     public event Action? TimelineChanged;
+    /// <summary>Operator の再生が末尾まで到達したとき。</summary>
+    public event Action? MediaEnded;
+    /// <summary>遠隔プレビュー向け。ポーズ中でも JPEG を取り直してほしいときに発火。</summary>
+    public event Action? PreviewKeyframeRequested;
     /// <summary>表示スロットが切り替わった（0 or 1）。UI は両 MPE を再バインドして可視を更新する。</summary>
     public event Action<int>? VisibleSlotChanged;
 
@@ -274,13 +278,21 @@ public sealed class EngineSession : IDisposable
         }, token);
     }
 
-    public async Task OpenNetaAsync(NetaItem item, CancellationToken cancellationToken = default)
+    public async Task OpenNetaAsync(
+        NetaItem item,
+        CancellationToken cancellationToken = default,
+        bool forceToHead = false)
     {
         if (string.IsNullOrWhiteSpace(item.Path) || !File.Exists(item.Path))
             throw new FileNotFoundException("動画ファイルが見つかりません", item.Path);
 
+        // 同一ネタの再選択: 通常は何もしない。forceToHead なら先頭へ戻す。
         if (string.Equals(CurrentPath, item.Path, StringComparison.OrdinalIgnoreCase))
+        {
+            if (forceToHead)
+                RestartToHead();
             return;
+        }
 
         var generation = Interlocked.Increment(ref _openGeneration);
         cancellationToken.ThrowIfCancellationRequested();
@@ -291,6 +303,7 @@ public sealed class EngineSession : IDisposable
         var standbySlot = 1 - _visibleSlotIndex;
         var oldVisibleSlot = _visibleSlotIndex;
         var oldVisiblePair = _displayPairs[oldVisibleSlot];
+        var resetToHead = forceToHead || !AppSettings.ResumePlayback;
 
         try
         {
@@ -303,7 +316,7 @@ public sealed class EngineSession : IDisposable
                     return;
                 }
 
-                if (!AppSettings.ResumePlayback)
+                if (resetToHead)
                     ResetPairToStart(warmed);
 
                 ReleaseDisplayPair(standbySlot);
@@ -313,7 +326,7 @@ public sealed class EngineSession : IDisposable
             else
             {
                 var standbyPair = _displayPairs[standbySlot];
-                await PreparePairAtStartAsync(standbyPair, item.Path, cancellationToken).ConfigureAwait(false);
+                await PreparePairAtStartAsync(standbyPair, item.Path, cancellationToken).ConfigureAwait(true);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (generation != _openGeneration)
                     return;
@@ -324,12 +337,8 @@ public sealed class EngineSession : IDisposable
             IsPlaying = false;
             CurrentPath = item.Path;
             _visibleSlotIndex = standbySlot;
-            if (!AppSettings.ResumePlayback)
-            {
-                var visible = _displayPairs[_visibleSlotIndex];
-                ResetPairToStart(visible);
-                ForcePausedFrameRefresh(visible.Player, ClockRate);
-            }
+            if (resetToHead)
+                ResetPairToStart(_displayPairs[_visibleSlotIndex]);
 
             ApplyMutePolicy();
 
@@ -347,10 +356,13 @@ public sealed class EngineSession : IDisposable
             _displayPairs[oldVisibleSlot] = new MediaPlayerPair();
             WirePairEvents(_displayPairs[oldVisibleSlot]);
 
+            // 先にスロット切替を通知してからコマ更新する。
+            // （遠隔プレビュー等が新プレイヤーを購読してから VideoFrameAvailable を受け取る）
             VisibleSlotChanged?.Invoke(_visibleSlotIndex);
             SourceChanged?.Invoke();
             PlaybackStateChanged?.Invoke();
             TimelineChanged?.Invoke();
+            RequestPreviewKeyframe(withRetries: true);
         }
         catch (OperationCanceledException)
         {
@@ -360,6 +372,91 @@ public sealed class EngineSession : IDisposable
         {
             throw;
         }
+    }
+
+    /// <summary>いま開いているネタを先頭ポーズに戻す（同一ネタ再選択用）。</summary>
+    public void RestartToHead()
+    {
+        if (CurrentPath is null)
+            return;
+
+        if (IsPlaying)
+            Pause();
+
+        ClearStrokes();
+        SetRate(1.0);
+        IsPlaying = false;
+
+        var visible = _displayPairs[_visibleSlotIndex];
+        ResetPairToStart(visible);
+        ApplyMutePolicy();
+
+        // SourceChanged は購読の張り直しを誘発して先頭コマを落とすので使わない
+        PlaybackStateChanged?.Invoke();
+        TimelineChanged?.Invoke();
+        RequestPreviewKeyframe(withRetries: true);
+    }
+
+    /// <summary>ポーズ中プレビュー用に VideoFrameAvailable を起こす。</summary>
+    public void RequestPausedFrameRefresh()
+    {
+        if (CurrentPath is null || _disposed)
+            return;
+        // 再生中に呼ぶと Play→Pause で止まってしまうのでスキップ
+        if (IsPlaying)
+            return;
+        ForcePausedFrameRefresh(OperatorPlayer, ClockRate);
+    }
+
+    private void RequestPreviewKeyframe(bool withRetries)
+    {
+        PreviewKeyframeRequested?.Invoke();
+        RequestPausedFrameRefresh();
+        if (!withRetries)
+            return;
+
+        var path = CurrentPath;
+        var slot = _visibleSlotIndex;
+        var generation = _openGeneration;
+        _ = Task.Run(async () =>
+        {
+            foreach (var delayMs in new[] { 40, 120, 280 })
+            {
+                try
+                {
+                    await Task.Delay(delayMs).ConfigureAwait(false);
+                }
+                catch
+                {
+                    return;
+                }
+
+                if (_disposed || generation != _openGeneration)
+                    return;
+                if (!string.Equals(CurrentPath, path, StringComparison.OrdinalIgnoreCase))
+                    return;
+                if (_visibleSlotIndex != slot)
+                    return;
+                if (IsPlaying)
+                    return;
+
+                var dq = App.DispatcherQueue;
+                if (dq is null)
+                    return;
+
+                dq.TryEnqueue(() =>
+                {
+                    if (_disposed || generation != _openGeneration)
+                        return;
+                    if (!string.Equals(CurrentPath, path, StringComparison.OrdinalIgnoreCase))
+                        return;
+                    if (IsPlaying)
+                        return;
+                    PreviewKeyframeRequested?.Invoke();
+                    RequestPausedFrameRefresh();
+                });
+            }
+        });
     }
 
     /// <summary>指定パスのネタを解放（再生中なら停止、ウォームからも除去）。</summary>
@@ -657,6 +754,7 @@ public sealed class EngineSession : IDisposable
             return;
 
         Pause();
+        MediaEnded?.Invoke();
     }
 
     private void ReleaseDisplayPair(int slotIndex)
@@ -682,7 +780,19 @@ public sealed class EngineSession : IDisposable
             pair.Player.Pause();
             pair.Player.IsMuted = true;
             pair.Player.Volume = 0;
-            pair.Player.PlaybackSession.Position = TimeSpan.Zero;
+            var session = pair.Player.PlaybackSession;
+            // すでに先頭だと FrameAvailable が来ないことがあるので一度ずらす
+            try
+            {
+                if (session.Position <= TimeSpan.FromMilliseconds(16))
+                    session.Position = TimeSpan.FromMilliseconds(48);
+            }
+            catch
+            {
+                // ignore
+            }
+
+            session.Position = TimeSpan.Zero;
         }
         catch
         {

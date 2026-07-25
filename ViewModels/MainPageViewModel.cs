@@ -26,6 +26,7 @@ public partial class MainPageViewModel : ObservableObject
     private double _pendingPreviewSeconds;
     private bool _hasPendingPreview;
     private bool _suppressNetaListPersist;
+    private bool _suppressOpenOnNetaSelect;
 
     public ObservableCollection<NetaItem> NetaItems { get; } = [];
 
@@ -331,6 +332,45 @@ public partial class MainPageViewModel : ObservableObject
 
     public int ClearAllNetaItems() => RemoveNetaItems(NetaItems.ToList());
 
+    /// <summary>
+    /// 現在のネタフォルダを再スキャンして未登録の動画を追記する（遠隔の「一覧更新」用）。
+    /// 共有フォルダ専用設定は不要。操作PCで最後に開いた／記憶したフォルダを使う。
+    /// </summary>
+    public async Task ReloadCurrentNetaFolderAsync()
+    {
+        var path = _session.FolderPath;
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+        {
+            StatusText = "ネタフォルダ未設定。操作PCでフォルダを開いてください";
+            return;
+        }
+
+        try
+        {
+            foreach (var item in NetaItems.ToList())
+                item.RefreshMissingState();
+
+            var items = await _session.LoadNetaFolderFromPathAsync(path);
+            var added = AppendNetaList(items);
+            var name = System.IO.Path.GetFileName(path.TrimEnd('\\', '/'));
+            if (string.IsNullOrEmpty(name))
+                name = path;
+
+            StatusText = items.Count == 0
+                ? $"{name}（動画なし）"
+                : added == 0
+                    ? $"{name}（新規なし / 合計 {NetaItems.Count} 本）"
+                    : $"{name}（+{added} 本 / 合計 {NetaItems.Count} 本）";
+
+            // 本番中はダイアログを出さない（OfferMovConvertAsync 内で判定）
+            await OfferMovConvertAsync(items);
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"一覧更新失敗: {ex.Message}";
+        }
+    }
+
     [RelayCommand(CanExecute = nameof(CanUseEditControls))]
     private async Task PickFolderAsync()
     {
@@ -402,6 +442,9 @@ public partial class MainPageViewModel : ObservableObject
 
     partial void OnSelectedNetaChanged(NetaItem? value)
     {
+        if (_suppressOpenOnNetaSelect)
+            return;
+
         if (value is null)
             return;
 
@@ -411,7 +454,32 @@ public partial class MainPageViewModel : ObservableObject
             return;
         }
 
-        _ = OpenSelectedAsync(value);
+        _ = OpenSelectedAsync(value, forceToHead: false);
+    }
+
+    /// <summary>遠隔からのネタ選択。同じネタでも毎回先頭ポーズにする。</summary>
+    public async Task SelectNetaForRemoteAsync(NetaItem item)
+    {
+        if (item.IsMissing)
+        {
+            StatusText = $"素材なし: {item.DisplayName}";
+            return;
+        }
+
+        if (!ReferenceEquals(SelectedNeta, item))
+        {
+            _suppressOpenOnNetaSelect = true;
+            try
+            {
+                SelectedNeta = item;
+            }
+            finally
+            {
+                _suppressOpenOnNetaSelect = false;
+            }
+        }
+
+        await OpenSelectedAsync(item, forceToHead: true);
     }
 
     private async Task RelocateMissingNetaAsync(NetaItem item)
@@ -475,7 +543,7 @@ public partial class MainPageViewModel : ObservableObject
         await OfferMovConvertAsync([item]);
     }
 
-    private async Task OpenSelectedAsync(NetaItem item)
+    private async Task OpenSelectedAsync(NetaItem item, bool forceToHead = false)
     {
         if (item.IsMissing)
         {
@@ -502,7 +570,7 @@ public partial class MainPageViewModel : ObservableObject
                 }
             }
 
-            await _session.OpenNetaAsync(item, token);
+            await _session.OpenNetaAsync(item, token, forceToHead);
             if (token.IsCancellationRequested)
                 return;
 

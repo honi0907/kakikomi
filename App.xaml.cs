@@ -49,6 +49,8 @@ public partial class App : Application
 
         StartMonitorWatch();
         DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, TryAutoOpenCleanForSecondary);
+        // MainPage 生成後に ViewModel が付くので、遠隔は遅延起動
+        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () => RemoteControlHost.Instance.ApplyFromSettings());
     }
 
     public static void OpenCleanWindow()
@@ -188,6 +190,8 @@ public partial class App : Application
 
     private void OnMainClosed(object sender, WindowEventArgs args)
     {
+        try { RemoteControlHost.Instance.Stop(); } catch { /* ignore */ }
+        try { PerfMonitorService.Instance.Dispose(); } catch { /* ignore */ }
         try { _monitorWatchTimer?.Stop(); } catch { /* ignore */ }
         _monitorWatchTimer = null;
 

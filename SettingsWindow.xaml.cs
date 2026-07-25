@@ -126,6 +126,41 @@ public sealed partial class SettingsWindow : Window
                 return;
             AppSettings.SetResumePlayback(ResumePlaybackCheck.IsChecked == true);
         };
+
+        OverlayPlayButtonCheck.Click += (_, _) =>
+        {
+            if (_loadingUi)
+                return;
+            AppSettings.SetOverlayPlayButton(OverlayPlayButtonCheck.IsChecked == true);
+        };
+
+        PerfMonitorCheck.Click += (_, _) =>
+        {
+            if (_loadingUi)
+                return;
+            AppSettings.SetPerfMonitorEnabled(PerfMonitorCheck.IsChecked == true);
+            PerfMonitorService.Instance.ApplyFromSettings();
+        };
+
+        PerfLogCheck.Click += (_, _) =>
+        {
+            if (_loadingUi)
+                return;
+            AppSettings.SetPerfLogEnabled(PerfLogCheck.IsChecked == true);
+            PerfMonitorService.Instance.ApplyFromSettings();
+        };
+
+        OpenPerfLogFolderBtn.Click += (_, _) => PerfMonitorService.OpenLogFolder();
+
+        RemoteControlEnabledCheck.Click += (_, _) =>
+        {
+            if (_loadingUi)
+                return;
+            // 適用ボタンで一括反映（ポート/PIN も同時）
+        };
+
+        RemoteApplyBtn.Click += (_, _) => ApplyRemoteSettingsFromUi();
+
         Closed += (_, _) =>
         {
             _loadingUi = true;
@@ -193,6 +228,56 @@ public sealed partial class SettingsWindow : Window
         StyleActionButton(Pen3SwatchBtn);
         StyleActionButton(ResetPenColorsBtn);
         StyleActionButton(CloseColorEditorBtn);
+        StyleActionButton(RemoteApplyBtn);
+        StyleActionButton(OpenPerfLogFolderBtn);
+    }
+
+    private void ApplyRemoteSettingsFromUi()
+    {
+        if (_loadingUi)
+            return;
+
+        var port = (int)Math.Round(RemotePortBox.Value);
+        if (double.IsNaN(RemotePortBox.Value))
+            port = AppSettings.RemoteControlPort;
+
+        AppSettings.SetRemoteControlPort(port);
+        AppSettings.SetRemoteControlPin(RemotePinBox.Password);
+        AppSettings.SetRemoteControlEnabled(RemoteControlEnabledCheck.IsChecked == true);
+        RemoteControlHost.Instance.ApplyFromSettings();
+        RefreshRemotePanel();
+    }
+
+    private void RefreshRemotePanel()
+    {
+        RemoteControlEnabledCheck.IsChecked = AppSettings.RemoteControlEnabled;
+        RemotePortBox.Value = AppSettings.RemoteControlPort;
+        RemotePinBox.Password = AppSettings.RemoteControlPin ?? "";
+
+        var host = RemoteControlHost.Instance;
+        if (host.IsRunning)
+        {
+            RemoteStatusText.Text = "稼働中";
+            RemoteStatusText.Foreground = new SolidColorBrush(Color.FromArgb(255, 74, 222, 128));
+            var urls = string.Join("\n", host.GetListenUrls());
+            RemoteUrlsText.Text =
+                "ブラウザで次を開いてください（同じ LAN）:\n" + urls +
+                "\n\nWindows ファイアウォールで受信を許可してください。";
+        }
+        else if (!string.IsNullOrWhiteSpace(host.LastError))
+        {
+            RemoteStatusText.Text = $"停止: {host.LastError}";
+            RemoteStatusText.Foreground = new SolidColorBrush(Color.FromArgb(255, 248, 113, 113));
+            RemoteUrlsText.Text = "";
+        }
+        else
+        {
+            RemoteStatusText.Text = AppSettings.RemoteControlEnabled
+                ? "有効だが待受できていません。適用を押すかポートを確認してください。"
+                : "停止中";
+            RemoteStatusText.Foreground = new SolidColorBrush(Color.FromArgb(255, 148, 163, 184));
+            RemoteUrlsText.Text = "";
+        }
     }
 
     private void DetachNetaListEvents()
@@ -322,6 +407,10 @@ public sealed partial class SettingsWindow : Window
             EraserSizeBox.Value = AppSettings.EraserThickness;
             FullSizeNextLaunchCheck.IsChecked = AppSettings.LaunchControlPanelFullSize;
             ResumePlaybackCheck.IsChecked = AppSettings.ResumePlayback;
+            OverlayPlayButtonCheck.IsChecked = AppSettings.OverlayPlayButton;
+            PerfMonitorCheck.IsChecked = AppSettings.PerfMonitorEnabled;
+            PerfLogCheck.IsChecked = AppSettings.PerfLogEnabled;
+            RefreshRemotePanel();
             SaveFolderPathText.Text = SaveFolderService.EnsureExists();
             ConvertFolderPathText.Text = MovTranscodeService.EnsureCacheDirectory();
             RefreshDemoPanel();
@@ -478,6 +567,7 @@ public sealed partial class SettingsWindow : Window
         PanelConvert.Visibility = tag == "Convert" ? Visibility.Visible : Visibility.Collapsed;
         PanelNetaList.Visibility = tag == "NetaList" ? Visibility.Visible : Visibility.Collapsed;
         PanelPlayback.Visibility = tag == "Playback" ? Visibility.Visible : Visibility.Collapsed;
+        PanelRemote.Visibility = tag == "Remote" ? Visibility.Visible : Visibility.Collapsed;
         PanelVersion.Visibility = tag == "Version" ? Visibility.Visible : Visibility.Collapsed;
         PanelDemo.Visibility = tag == "Demo" ? Visibility.Visible : Visibility.Collapsed;
         PanelPalette.Visibility = tag == "Palette" ? Visibility.Visible : Visibility.Collapsed;
@@ -495,6 +585,8 @@ public sealed partial class SettingsWindow : Window
             BindNetaManageList();
         if (tag == "Demo")
             RefreshDemoPanel();
+        if (tag == "Remote")
+            RefreshRemotePanel();
         if (tag == "Version")
         {
             VersionInfoText.Text = $"Kakikomi v{AppVersionReader.GetCurrentVersion()}";

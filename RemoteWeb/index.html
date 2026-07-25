@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Kakikomi Remote</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="auth" class="auth">
+    <div class="auth-card">
+      <div class="brand">Kakikomi</div>
+      <div class="auth-sub">LAN 遠隔操作</div>
+      <p class="muted">再生 PC と同じ PIN を入力（空ならそのまま接続）</p>
+      <input id="pin" type="password" inputmode="text" placeholder="PIN" autocomplete="off" />
+      <button id="connectBtn" class="btn btn-accent btn-block">接続</button>
+      <p id="authError" class="error"></p>
+    </div>
+  </div>
+
+  <div id="app" class="shell hidden">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <div class="brand-sm">ネタ一覧</div>
+        <button id="disconnectBtn" class="btn btn-ghost btn-sm">切断</button>
+      </div>
+      <button id="reloadNetasBtn" class="btn btn-reload" title="操作PCのネタフォルダを再スキャン">
+        一覧を更新
+      </button>
+      <button id="netaLoopBtn" class="btn btn-loop" title="1本最後まで再生→次へ。最後の次は先頭">
+        ネタをループ
+      </button>
+      <div id="folderLine" class="folder-line muted">フォルダ: —</div>
+      <div id="netaList" class="neta-list"></div>
+      <div id="statusLine" class="status-line muted">未接続</div>
+    </aside>
+
+    <main class="main">
+      <div class="preview-panel">
+        <div class="preview-wrap">
+          <img id="preview" alt="preview" />
+          <div id="previewPlaceholder" class="preview-ph">映像待ち…</div>
+        </div>
+      </div>
+
+      <div class="timeline-bar">
+        <div id="timeText" class="time-text">0:00.0 / 0:00.0</div>
+        <div class="seek-wrap">
+          <input
+            id="seekBar"
+            class="seek"
+            type="range"
+            min="0"
+            max="0"
+            step="0.01"
+            value="0"
+            disabled />
+        </div>
+      </div>
+
+      <div class="transport-bar">
+        <div class="transport-scroll">
+          <button id="playBtn" class="btn btn-play">再生/停止</button>
+          <button id="backBtn" class="btn">-5秒</button>
+          <button id="fwdBtn" class="btn">+5秒</button>
+
+          <div class="sep" aria-hidden="true"></div>
+
+          <button data-rate="1" class="btn rate active">等速</button>
+          <button data-rate="0.5" class="btn rate">0.5x</button>
+          <button data-rate="0.25" class="btn rate">0.25x</button>
+          <button data-rate="2" class="btn rate">2x</button>
+
+          <div class="sep" aria-hidden="true"></div>
+
+          <button id="clearBtn" class="btn btn-clear">全消去</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

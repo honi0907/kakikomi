@@ -35,6 +35,30 @@ public static class AppSettings
     /// </summary>
     public static bool ResumePlayback { get; private set; }
 
+    /// <summary>
+    /// ON（既定）: コンパネ映像右上に大きめの再生/停止オーバーレイを表示。
+    /// </summary>
+    public static bool OverlayPlayButton { get; private set; } = true;
+
+    /// <summary>
+    /// ON: 操作パネル左下に CPU / メモリ / 遠隔プレビュー fps を表示。既定 OFF。
+    /// </summary>
+    public static bool PerfMonitorEnabled { get; private set; }
+
+    /// <summary>
+    /// ON: 負荷をファイルへ記録（平常 30 秒、危険時 5 秒）。既定 OFF。
+    /// </summary>
+    public static bool PerfLogEnabled { get; private set; }
+
+    /// <summary>LAN 遠隔操作（Web）を有効化。既定 OFF。</summary>
+    public static bool RemoteControlEnabled { get; private set; }
+
+    /// <summary>遠隔 HTTP ポート（既定 18765）。</summary>
+    public static int RemoteControlPort { get; private set; } = 18765;
+
+    /// <summary>遠隔接続用 PIN（空なら認証なし）。</summary>
+    public static string RemoteControlPin { get; private set; } = "kakikomi";
+
     /// <summary>既定 ON。解除パスワードで OFF にできる。</summary>
     public static bool DemoMode { get; private set; } = true;
 
@@ -77,6 +101,18 @@ public static class AppSettings
                 LaunchControlPanelFullSize = full;
             if (dto.ResumePlayback is { } resume)
                 ResumePlayback = resume;
+            if (dto.OverlayPlayButton is { } overlayPlay)
+                OverlayPlayButton = overlayPlay;
+            if (dto.PerfMonitorEnabled is { } perfMon)
+                PerfMonitorEnabled = perfMon;
+            if (dto.PerfLogEnabled is { } perfLog)
+                PerfLogEnabled = perfLog;
+            if (dto.RemoteControlEnabled is { } remoteOn)
+                RemoteControlEnabled = remoteOn;
+            if (dto.RemoteControlPort is { } remotePort)
+                RemoteControlPort = Math.Clamp(remotePort, 1024, 65535);
+            if (dto.RemoteControlPin is not null)
+                RemoteControlPin = dto.RemoteControlPin;
             if (dto.DemoMode is { } demo)
                 DemoMode = demo;
         }
@@ -145,6 +181,48 @@ public static class AppSettings
         Changed?.Invoke();
     }
 
+    public static void SetOverlayPlayButton(bool enabled)
+    {
+        OverlayPlayButton = enabled;
+        Persist();
+        Changed?.Invoke();
+    }
+
+    public static void SetPerfMonitorEnabled(bool enabled)
+    {
+        PerfMonitorEnabled = enabled;
+        Persist();
+        Changed?.Invoke();
+    }
+
+    public static void SetPerfLogEnabled(bool enabled)
+    {
+        PerfLogEnabled = enabled;
+        Persist();
+        Changed?.Invoke();
+    }
+
+    public static void SetRemoteControlEnabled(bool enabled)
+    {
+        RemoteControlEnabled = enabled;
+        Persist();
+        Changed?.Invoke();
+    }
+
+    public static void SetRemoteControlPort(int port)
+    {
+        RemoteControlPort = Math.Clamp(port, 1024, 65535);
+        Persist();
+        Changed?.Invoke();
+    }
+
+    public static void SetRemoteControlPin(string? pin)
+    {
+        RemoteControlPin = pin ?? "";
+        Persist();
+        Changed?.Invoke();
+    }
+
     public static bool TryUnlockDemoMode(string? password)
     {
         if (!string.Equals(password, DemoUnlockPassword, StringComparison.Ordinal))
@@ -178,6 +256,12 @@ public static class AppSettings
                 EraserThickness = EraserThickness,
                 LaunchControlPanelFullSize = LaunchControlPanelFullSize,
                 ResumePlayback = ResumePlayback,
+                OverlayPlayButton = OverlayPlayButton,
+                PerfMonitorEnabled = PerfMonitorEnabled,
+                PerfLogEnabled = PerfLogEnabled,
+                RemoteControlEnabled = RemoteControlEnabled,
+                RemoteControlPort = RemoteControlPort,
+                RemoteControlPin = RemoteControlPin,
                 DemoMode = DemoMode
             };
 
@@ -224,6 +308,12 @@ public static class AppSettings
         public double? EraserThickness { get; set; }
         public bool? LaunchControlPanelFullSize { get; set; }
         public bool? ResumePlayback { get; set; }
+        public bool? OverlayPlayButton { get; set; }
+        public bool? PerfMonitorEnabled { get; set; }
+        public bool? PerfLogEnabled { get; set; }
+        public bool? RemoteControlEnabled { get; set; }
+        public int? RemoteControlPort { get; set; }
+        public string? RemoteControlPin { get; set; }
         public bool? DemoMode { get; set; }
     }
 }

@@ -36,6 +36,7 @@
                 <ListViewItem Tag="Save" Content="保存" />
                 <ListViewItem Tag="Convert" Content=".mov 変換" />
                 <ListViewItem Tag="NetaList" Content="ネタ一覧" />
+                <ListViewItem Tag="Remote" Content="LAN 遠隔操作" />
                 <ListViewItem Tag="Playback" Content="再生" />
                 <ListViewItem Tag="Palette" Content="パレットの色編集" />
                 <ListViewItem Tag="PenSize" Content="ペンサイズ" />
@@ -255,6 +256,50 @@
                     </StackPanel>
                 </StackPanel>
 
+                <StackPanel x:Name="PanelRemote" Spacing="16" Visibility="Collapsed">
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="#FFF8FAFC" Text="LAN 遠隔操作" />
+                    <TextBlock
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
+                        Text="同じ LAN の別 PC / タブレットのブラウザから、再生・ネタ切替などを操作できます。ペン描画は遠隔しません。低画質の映像プレビュー付きです。" />
+                    <CheckBox
+                        x:Name="RemoteControlEnabledCheck"
+                        Content="遠隔操作を有効にする"
+                        Foreground="#FFE2E8F0" />
+                    <NumberBox
+                        x:Name="RemotePortBox"
+                        Header="ポート"
+                        Minimum="1024"
+                        Maximum="65535"
+                        SpinButtonPlacementMode="Compact"
+                        Value="18765" />
+                    <PasswordBox
+                        x:Name="RemotePinBox"
+                        Header="PIN（空なら認証なし）"
+                        PasswordRevealMode="Peek" />
+                    <Button
+                        x:Name="RemoteApplyBtn"
+                        MinWidth="180"
+                        MinHeight="44"
+                        Content="設定を適用" />
+                    <TextBlock
+                        x:Name="RemoteStatusText"
+                        Foreground="#FFE2E8F0"
+                        TextWrapping="Wrap"
+                        Text="停止中" />
+                    <TextBlock
+                        Foreground="#FF94A3B8"
+                        FontSize="12"
+                        TextWrapping="Wrap"
+                        Text="待受に失敗する場合はポート番号を変えて再適用してください。別 PC からはファイアウォール許可が必要です。" />
+                    <TextBlock
+                        x:Name="RemoteUrlsText"
+                        Foreground="#FF94A3B8"
+                        FontSize="13"
+                        TextWrapping="Wrap"
+                        IsTextSelectionEnabled="True" />
+                </StackPanel>
+
                 <StackPanel x:Name="PanelPlayback" Spacing="16" Visibility="Collapsed">
                     <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="#FFF8FAFC" Text="再生" />
                     <TextBlock
@@ -265,6 +310,40 @@
                         x:Name="ResumePlaybackCheck"
                         Content="レジューム再生"
                         Foreground="#FFE2E8F0" />
+                    <TextBlock
+                        Margin="0,12,0,0"
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
+                        Text="ウィンドウ右上に、指で叩きやすい大きめの再生/停止ボタンを重ねます。下バーの再生/停止と同じ動作です。" />
+                    <CheckBox
+                        x:Name="OverlayPlayButtonCheck"
+                        Content="映像上の大きめ再生ボタン"
+                        Foreground="#FFE2E8F0" />
+                    <TextBlock
+                        Margin="0,12,0,0"
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
+                        Text="操作パネル左下に、このアプリの CPU・メモリ使用量と、遠隔プレビュー送信の fps / 転送量を表示します。調査用です（既定 OFF）。" />
+                    <CheckBox
+                        x:Name="PerfMonitorCheck"
+                        Content="負荷モニターを表示"
+                        Foreground="#FFE2E8F0" />
+                    <TextBlock
+                        Margin="0,12,0,0"
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
+                        Text="負荷をファイルに残します。平常時は 30 秒ごと、CPU 80%超またはメモリ 2500MB 超のときは 5 秒ごと。保存先は %LocalAppData%\Kakikomi\logs（7日で自動削除）。" />
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <CheckBox
+                            x:Name="PerfLogCheck"
+                            Content="負荷ログをファイルに保存"
+                            Foreground="#FFE2E8F0"
+                            VerticalAlignment="Center" />
+                        <Button
+                            x:Name="OpenPerfLogFolderBtn"
+                            MinHeight="36"
+                            Content="ログフォルダを開く" />
+                    </StackPanel>
                 </StackPanel>
 
                 <StackPanel x:Name="PanelExit" Spacing="16" Visibility="Collapsed">

@@ -498,6 +498,52 @@
             Grid.ColumnSpan="2"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch"
-            Visibility="Collapsed" />
+            Visibility="Collapsed"
+            IsHitTestVisible="False" />
+
+        <!-- 指タッチ用。ウィンドウ右上。下バーの再生/停止と同じコマンド -->
+        <Button
+            x:Name="OverlayPlayBtn"
+            Grid.RowSpan="4"
+            Grid.ColumnSpan="2"
+            Width="160"
+            Height="160"
+            Margin="0,-12,-12,0"
+            Padding="0"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            HorizontalContentAlignment="Center"
+            VerticalContentAlignment="Center"
+            Background="#99DC2626"
+            BorderThickness="0"
+            CornerRadius="0"
+            FontSize="64"
+            FontWeight="SemiBold"
+            Foreground="#E6FFFFFF"
+            Content="▶"
+            Command="{x:Bind ViewModel.PlayPauseCommand}" />
+
+        <!-- 負荷モニター（設定で ON）。クリックを邪魔しない -->
+        <Border
+            x:Name="PerfMonitorOverlay"
+            Grid.RowSpan="4"
+            Grid.ColumnSpan="2"
+            Margin="12,0,12,12"
+            Padding="10,6"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            Background="#CC020617"
+            BorderBrush="#FF475569"
+            BorderThickness="1"
+            CornerRadius="8"
+            IsHitTestVisible="False"
+            Visibility="Collapsed">
+            <TextBlock
+                x:Name="PerfMonitorText"
+                FontFamily="Consolas"
+                FontSize="13"
+                Foreground="#FFE2E8F0"
+                Text="CPU —  |  Mem —" />
+        </Border>
     </Grid>
 </Page>

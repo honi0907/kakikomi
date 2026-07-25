@@ -29,6 +29,7 @@ public sealed partial class MainPage : Page
         Loaded += OnLoaded;
         Unloaded += (_, _) =>
         {
+            PerfMonitorService.Instance.Updated -= OnPerfMonitorUpdated;
             if (ReferenceEquals(App.MainViewModel, ViewModel))
                 App.MainViewModel = null;
         };
@@ -51,6 +52,8 @@ public sealed partial class MainPage : Page
         ApplyChrome(PlayToggle, IdleBg, IdleFg);
         ApplyIdleChromeToSecondaryButtons();
         UpdatePlayToggleLook();
+        UpdateOverlayPlayVisibility();
+        UpdatePerfMonitorVisibility();
         UpdateRateToggleLooks();
         UpdateEraserToggleLook();
         UpdateEditModeButtonLook();
@@ -60,6 +63,8 @@ public sealed partial class MainPage : Page
         ViewModel.SetPenRed();
         OnTimelineSliderSync(ViewModel.TimelinePosition, ViewModel.TimelineMaximum);
         SubscribeVisibleSlotUi(ViewModel.Session);
+        PerfMonitorService.Instance.Updated += OnPerfMonitorUpdated;
+        PerfMonitorService.Instance.ApplyFromSettings();
         await ViewModel.LoadSavedFolderAsync();
         _ = ViewModel.CheckForUpdatesOnStartupAsync();
     }
@@ -135,10 +140,44 @@ public sealed partial class MainPage : Page
         ApplyPenSwatches();
         ViewModel.ReapplyActivePen();
         UpdateDemoWatermark();
+        UpdateOverlayPlayVisibility();
+        UpdatePerfMonitorVisibility();
+        PerfMonitorService.Instance.ApplyFromSettings();
     }
 
     private void UpdateDemoWatermark() =>
         DemoWatermark.Visibility = AppSettings.DemoMode ? Visibility.Visible : Visibility.Collapsed;
+
+    private void UpdateOverlayPlayVisibility() =>
+        OverlayPlayBtn.Visibility = AppSettings.OverlayPlayButton
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    private void UpdatePerfMonitorVisibility()
+    {
+        var on = AppSettings.PerfMonitorEnabled;
+        PerfMonitorOverlay.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        if (on)
+            PerfMonitorText.Text = PerfMonitorService.Instance.OverlayText;
+    }
+
+    private void OnPerfMonitorUpdated()
+    {
+        var dq = App.DispatcherQueue;
+        if (dq is null)
+            return;
+
+        void Apply()
+        {
+            if (AppSettings.PerfMonitorEnabled)
+                PerfMonitorText.Text = PerfMonitorService.Instance.OverlayText;
+        }
+
+        if (dq.HasThreadAccess)
+            Apply();
+        else
+            dq.TryEnqueue(Apply);
+    }
 
     private void ApplyPenSwatches()
     {
@@ -167,9 +206,19 @@ public sealed partial class MainPage : Page
     private void UpdatePlayToggleLook()
     {
         if (ViewModel.IsPlaying)
+        {
             ApplyChrome(PlayToggle, PlayPlayingBg, White);
+            OverlayPlayBtn.Content = "❚❚";
+            OverlayPlayBtn.Background = new SolidColorBrush(Color.FromArgb(0x99, 37, 99, 235));
+            OverlayPlayBtn.Foreground = new SolidColorBrush(Color.FromArgb(0xE6, 255, 255, 255));
+        }
         else
+        {
             ApplyChrome(PlayToggle, PlayStoppedBg, White);
+            OverlayPlayBtn.Content = "▶";
+            OverlayPlayBtn.Background = new SolidColorBrush(Color.FromArgb(0x99, 220, 38, 38));
+            OverlayPlayBtn.Foreground = new SolidColorBrush(Color.FromArgb(0xE6, 255, 255, 255));
+        }
     }
 
     private void UpdateRateToggleLooks()
