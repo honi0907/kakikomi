@@ -13,6 +13,7 @@ namespace Kakikomi.Controls;
 /// <summary>
 /// MediaPlayer Frame Server 映像を Image に描画する。
 /// Copy は <see cref="MediaFramePump"/> が1回だけ行い、ここは描画のみ。
+/// 描画失敗時は ImageSource を破棄して次フレームで再生成する。
 /// </summary>
 public sealed class CompositionVideoHost : Grid
 {
@@ -28,6 +29,8 @@ public sealed class CompositionVideoHost : Grid
     private CanvasRenderTarget? _pendingTarget;
     private int _pendingWidth;
     private int _pendingHeight;
+    private int _drawFailures;
+    private long _lastRecoverLogMs;
 
     public CompositionVideoHost()
     {
@@ -56,20 +59,27 @@ public sealed class CompositionVideoHost : Grid
 
         _player.IsVideoFrameServerEnabled = true;
         _subscription = MediaFramePump.Subscribe(_player, OnFrameCopied);
+        _drawFailures = 0;
+    }
+
+    /// <summary>購読を強制張り直し（映像経路復帰用）。</summary>
+    public void ForceRebind()
+    {
+        var player = _player;
+        if (player is null)
+            return;
+
+        DetachSubscription();
+        ResetImageSource();
+        player.IsVideoFrameServerEnabled = true;
+        _subscription = MediaFramePump.Subscribe(player, OnFrameCopied);
+        _drawFailures = 0;
     }
 
     private void Detach()
     {
         DetachSubscription();
-        lock (_drawLock)
-        {
-            _image.Source = null;
-            _imageSource = null;
-            _surfaceWidth = 0;
-            _surfaceHeight = 0;
-            _pendingTarget = null;
-        }
-
+        ResetImageSource();
         _player = null;
     }
 
@@ -85,6 +95,18 @@ public sealed class CompositionVideoHost : Grid
         }
 
         _subscription = null;
+    }
+
+    private void ResetImageSource()
+    {
+        lock (_drawLock)
+        {
+            _image.Source = null;
+            _imageSource = null;
+            _surfaceWidth = 0;
+            _surfaceHeight = 0;
+            _pendingTarget = null;
+        }
     }
 
     private void OnFrameCopied(CanvasRenderTarget target, int width, int height)
@@ -156,10 +178,28 @@ public sealed class CompositionVideoHost : Grid
             // Copy 済みターゲットをそのまま描く（再 Copy しない）
             using var session = _imageSource.CreateDrawingSession(Color.FromArgb(255, 0, 0, 0));
             session.DrawImage(target);
+            _drawFailures = 0;
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[CompositionVideoHost] draw: {ex.Message}");
+            _drawFailures++;
+            ResetImageSource();
+
+            if (_drawFailures >= 3)
+            {
+                _drawFailures = 0;
+                var now = Environment.TickCount64;
+                if (now - _lastRecoverLogMs >= 5_000)
+                {
+                    _lastRecoverLogMs = now;
+                    PerfMonitorService.Instance.LogEvent(
+                        "WARN",
+                        $"CompositionVideoHost rebind after draw fail: {ex.Message}");
+                }
+
+                ForceRebind();
+            }
         }
     }
 
@@ -171,8 +211,32 @@ public sealed class CompositionVideoHost : Grid
         _surfaceWidth = width;
         _surfaceHeight = height;
 
-        var device = CanvasDevice.GetSharedDevice();
-        _imageSource = new CanvasImageSource(device, width, height, 96);
-        _image.Source = _imageSource;
+        try
+        {
+            var device = CanvasDevice.GetSharedDevice();
+            if (device.IsDeviceLost())
+                device = new CanvasDevice();
+            _imageSource = new CanvasImageSource(device, width, height, 96);
+            _image.Source = _imageSource;
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                var device = new CanvasDevice();
+                _imageSource = new CanvasImageSource(device, width, height, 96);
+                _image.Source = _imageSource;
+                PerfMonitorService.Instance.LogEvent(
+                    "WARN",
+                    $"CompositionVideoHost ImageSource recreated: {ex.Message}");
+            }
+            catch (Exception ex2)
+            {
+                _imageSource = null;
+                PerfMonitorService.Instance.LogEvent(
+                    "WARN",
+                    $"CompositionVideoHost ImageSource failed: {ex.Message} / {ex2.Message}");
+            }
+        }
     }
 }

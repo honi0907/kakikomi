@@ -9,12 +9,14 @@ namespace Kakikomi.Services;
 
 /// <summary>
 /// Operator 映像を縮小 JPEG 化して遠隔へ送る。
-/// 画質よりフレーム更新を優先（約 12fps、幅 480）。
+/// ブラウザ未接続では購読しない。再生中は間引き、ネタ切替直後は一時休止。
 /// </summary>
 internal sealed class RemotePreviewCapture : IDisposable
 {
     private const int TargetWidth = 480;
-    private const int MinIntervalMs = 80; // ~12.5 fps
+    private const int IdleIntervalMs = 80; // ポーズ時 ~12.5 fps
+    private const int PlayingIntervalMs = 200; // 再生中 ~5 fps
+    private const int SwitchPauseMs = 450;
     private const long JpegQuality = 35;
 
     private readonly Action<byte[]> _onJpeg;
@@ -30,6 +32,8 @@ internal sealed class RemotePreviewCapture : IDisposable
     private int _forceGeneration;
     private int _retryScheduled;
     private long _lastEncodeTicks;
+    private long _pauseUntilTicks;
+    private int _clientsConnected;
     private bool _disposed;
 
     public RemotePreviewCapture(Action<byte[]> onJpeg)
@@ -47,7 +51,22 @@ internal sealed class RemotePreviewCapture : IDisposable
         engine.VisibleSlotChanged += OnVisibleSlotChanged;
         engine.SourceChanged += OnSourceChanged;
         engine.PreviewKeyframeRequested += OnKeyframeRequested;
-        Resubscribe(engine.VisibleSlotIndex, force: true);
+        // クライアント接続まで MediaFramePump に相乗りしない
+    }
+
+    public void SetClientsConnected(bool connected)
+    {
+        var was = Interlocked.Exchange(ref _clientsConnected, connected ? 1 : 0);
+        if (connected)
+        {
+            var engine = _engine;
+            if (engine is not null)
+                Resubscribe(engine.VisibleSlotIndex, force: true);
+        }
+        else if (was == 1)
+        {
+            Unsubscribe();
+        }
     }
 
     public void Dispose()
@@ -63,26 +82,38 @@ internal sealed class RemotePreviewCapture : IDisposable
             _engine.PreviewKeyframeRequested -= OnKeyframeRequested;
         }
 
+        Unsubscribe();
         lock (_gate)
         {
-            _subscription?.Dispose();
-            _subscription = null;
-            _subscribedPlayer = null;
             try { _scaled?.Dispose(); } catch { /* ignore */ }
             _scaled = null;
         }
     }
 
-    private void OnVisibleSlotChanged(int slot) => Resubscribe(slot, force: true);
+    private void OnVisibleSlotChanged(int slot)
+    {
+        PauseCaptureBriefly();
+        if (Volatile.Read(ref _clientsConnected) == 1)
+            Resubscribe(slot, force: true);
+    }
 
     private void OnSourceChanged()
     {
+        PauseCaptureBriefly();
         var engine = _engine;
-        if (engine is not null)
+        if (engine is not null && Volatile.Read(ref _clientsConnected) == 1)
             Resubscribe(engine.VisibleSlotIndex, force: true);
     }
 
-    private void OnKeyframeRequested() => ArmForceCapture();
+    private void OnKeyframeRequested()
+    {
+        if (Volatile.Read(ref _clientsConnected) != 1)
+            return;
+        ArmForceCapture();
+    }
+
+    private void PauseCaptureBriefly() =>
+        Interlocked.Exchange(ref _pauseUntilTicks, Environment.TickCount64 + SwitchPauseMs);
 
     private void ArmForceCapture()
     {
@@ -92,8 +123,21 @@ internal sealed class RemotePreviewCapture : IDisposable
         ScheduleForceRetries(gen);
     }
 
+    private void Unsubscribe()
+    {
+        lock (_gate)
+        {
+            _subscription?.Dispose();
+            _subscription = null;
+            _subscribedPlayer = null;
+        }
+    }
+
     private void Resubscribe(int slot, bool force)
     {
+        if (_disposed || Volatile.Read(ref _clientsConnected) != 1)
+            return;
+
         var engine = _engine;
         if (engine is null)
             return;
@@ -137,6 +181,8 @@ internal sealed class RemotePreviewCapture : IDisposable
                     await Task.Delay(delayMs).ConfigureAwait(false);
                     if (_disposed)
                         return;
+                    if (Volatile.Read(ref _clientsConnected) != 1)
+                        return;
                     if (generation != Volatile.Read(ref _forceGeneration))
                         return;
                     if (Volatile.Read(ref _forceNext) == 0)
@@ -151,7 +197,11 @@ internal sealed class RemotePreviewCapture : IDisposable
                     {
                         if (_disposed || generation != Volatile.Read(ref _forceGeneration))
                             return;
+                        if (Volatile.Read(ref _clientsConnected) != 1)
+                            return;
                         if (Volatile.Read(ref _forceNext) == 0)
+                            return;
+                        if (engine.IsPlaying)
                             return;
                         engine.RequestPausedFrameRefresh();
                     });
@@ -168,10 +218,17 @@ internal sealed class RemotePreviewCapture : IDisposable
     {
         if (_disposed || width <= 0 || height <= 0)
             return;
+        if (Volatile.Read(ref _clientsConnected) != 1)
+            return;
+
+        var now = Environment.TickCount64;
+        if (now < Interlocked.Read(ref _pauseUntilTicks))
+            return;
 
         var force = Volatile.Read(ref _forceNext) == 1;
-        var now = Environment.TickCount64;
-        if (!force && now - Interlocked.Read(ref _lastEncodeTicks) < MinIntervalMs)
+        var playing = _engine?.IsPlaying == true;
+        var minInterval = playing ? PlayingIntervalMs : IdleIntervalMs;
+        if (!force && now - Interlocked.Read(ref _lastEncodeTicks) < minInterval)
             return;
 
         if (Interlocked.Exchange(ref _encoding, 1) == 1)
@@ -196,6 +253,7 @@ internal sealed class RemotePreviewCapture : IDisposable
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[RemotePreview] downsample: {ex.Message}");
+            PerfMonitorService.Instance.LogEvent("WARN", $"RemotePreview downsample: {ex.Message}");
             Interlocked.Exchange(ref _encoding, 0);
             return;
         }
@@ -239,7 +297,18 @@ internal sealed class RemotePreviewCapture : IDisposable
             if (_scaled is null || _scaledW != outW || _scaledH != outH)
             {
                 try { _scaled?.Dispose(); } catch { /* ignore */ }
-                _scaled = new CanvasRenderTarget(CanvasDevice.GetSharedDevice(), outW, outH, 96);
+                try
+                {
+                    var device = CanvasDevice.GetSharedDevice();
+                    if (device.IsDeviceLost())
+                        device = new CanvasDevice();
+                    _scaled = new CanvasRenderTarget(device, outW, outH, 96);
+                }
+                catch
+                {
+                    _scaled = new CanvasRenderTarget(new CanvasDevice(), outW, outH, 96);
+                }
+
                 _scaledW = outW;
                 _scaledH = outH;
             }

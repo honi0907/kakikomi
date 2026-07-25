@@ -96,6 +96,7 @@ public sealed class RemoteControlHost : IDisposable
             _cts = new CancellationTokenSource();
             _preview = new RemotePreviewCapture(OnJpegFrame);
             _preview.Start();
+            // WS クライアントが付くまでプレビュー購読しない（本機映像経路の負荷軽減）
             _running = true;
             var token = _cts.Token;
             _acceptLoop = Task.Run(() => AcceptLoopAsync(listener, token), token);
@@ -267,6 +268,7 @@ public sealed class RemoteControlHost : IDisposable
         var id = Guid.NewGuid();
         var session = new ClientSession(id, socket);
         _clients[id] = session;
+        RefreshPreviewClientGate();
 
         try
         {
@@ -308,7 +310,29 @@ public sealed class RemoteControlHost : IDisposable
         {
             _clients.TryRemove(id, out _);
             session.Dispose();
+            RefreshPreviewClientGate();
         }
+    }
+
+    private void RefreshPreviewClientGate()
+    {
+        RemotePreviewCapture? preview;
+        bool hasOpen;
+        lock (_gate)
+        {
+            preview = _preview;
+            hasOpen = false;
+            foreach (var client in _clients.Values)
+            {
+                if (client.Socket.State == WebSocketState.Open)
+                {
+                    hasOpen = true;
+                    break;
+                }
+            }
+        }
+
+        preview?.SetClientsConnected(hasOpen);
     }
 
     private void OnJpegFrame(byte[] jpeg)

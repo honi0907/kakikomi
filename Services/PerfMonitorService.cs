@@ -177,6 +177,19 @@ public sealed class PerfMonitorService : IDisposable
         Interlocked.Add(ref _previewBytes, byteLength);
     }
 
+    /// <summary>
+    /// 映像経路など重要イベントをログへ残す。
+    /// Perf ログ設定が OFF でも WARN/ERROR は必ず書く。
+    /// </summary>
+    public void LogEvent(string level, string message)
+    {
+        var upper = level.Trim().ToUpperInvariant();
+        var force = upper is "WARN" or "ERROR" or "FATAL";
+        if (!force && !AppSettings.PerfLogEnabled)
+            return;
+        AppendLog(upper, message, force: true);
+    }
+
     public static void OpenLogFolder()
     {
         try
