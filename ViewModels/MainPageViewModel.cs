@@ -357,7 +357,7 @@ public partial class MainPageViewModel : ObservableObject
                 name = path;
 
             StatusText = items.Count == 0
-                ? $"{name}（動画なし）"
+                ? $"{name}（素材なし）"
                 : added == 0
                     ? $"{name}（新規なし / 合計 {NetaItems.Count} 本）"
                     : $"{name}（+{added} 本 / 合計 {NetaItems.Count} 本）";
@@ -395,7 +395,7 @@ public partial class MainPageViewModel : ObservableObject
             if (string.IsNullOrEmpty(name))
                 name = path;
             StatusText = items.Count == 0
-                ? $"{name}（動画なし。mp4/mov/mkv/wmv を入れて再選択）"
+                ? $"{name}（素材なし。動画または画像を入れて再選択）"
                 : added == 0
                     ? $"{name}（新規なし / 合計 {NetaItems.Count} 本）"
                     : $"{name}（+{added} 本 / 合計 {NetaItems.Count} 本）";
@@ -428,7 +428,7 @@ public partial class MainPageViewModel : ObservableObject
             var items = _session.CreateNetaItemsFromPaths(paths);
             var added = AppendNetaList(items);
             StatusText = items.Count == 0
-                ? "対応動画がありません（mp4/mov/mkv/wmv など）"
+                ? "対応する素材がありません（動画・画像）"
                 : added == 0
                     ? $"新規なし / 合計 {NetaItems.Count} 本"
                     : $"+{added} 本 / 合計 {NetaItems.Count} 本";
@@ -510,9 +510,9 @@ public partial class MainPageViewModel : ObservableObject
             return;
         }
 
-        if (!EngineSession.IsVideoFile(path))
+        if (!EngineSession.IsNetaFile(path))
         {
-            StatusText = "動画ファイルを選んでください";
+            StatusText = "動画または画像ファイルを選んでください";
             return;
         }
 

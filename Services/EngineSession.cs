@@ -22,6 +22,16 @@ public sealed class EngineSession : IDisposable
         ".mp4", ".mov", ".mkv", ".wmv", ".avi", ".m4v"
     ];
 
+    private static readonly string[] ImageExtensions =
+    [
+        ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff"
+    ];
+
+    /// <summary>ネタループで静止画を表示してから次へ進む秒数。</summary>
+    private const int ImageLoopHoldMs = 5_000;
+
+    private CancellationTokenSource? _imageLoopCts;
+
     private bool _disposed;
     private string? _folderPath;
 
@@ -84,7 +94,7 @@ public sealed class EngineSession : IDisposable
         try
         {
             items = Directory.EnumerateFiles(folderPath)
-                .Where(IsVideoFile)
+                .Where(IsNetaFile)
                 .OrderBy(p => Path.GetFileName(p), StringComparer.OrdinalIgnoreCase)
                 .Select(p => CreateNetaItem(p, allowMissing: false))
                 .ToList();
@@ -100,7 +110,7 @@ public sealed class EngineSession : IDisposable
     public IReadOnlyList<NetaItem> CreateNetaItemsFromPaths(IEnumerable<string> paths)
     {
         var items = paths
-            .Where(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p) && IsVideoFile(p))
+            .Where(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p) && IsNetaFile(p))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(p => Path.GetFileName(p), StringComparer.OrdinalIgnoreCase)
             .Select(p => CreateNetaItem(p, allowMissing: false))
@@ -157,11 +167,20 @@ public sealed class EngineSession : IDisposable
     public static bool IsVideoFile(string path) =>
         VideoExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
 
+    public static bool IsImageFile(string path) =>
+        ImageExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
+
+    public static bool IsNetaFile(string path) =>
+        IsVideoFile(path) || IsImageFile(path);
+
+    public bool IsCurrentNetaImage =>
+        CurrentPath is not null && IsImageFile(CurrentPath);
+
     private static NetaItem CreateNetaItem(string path, bool allowMissing)
     {
         var exists = File.Exists(path);
         if (!allowMissing && !exists)
-            throw new FileNotFoundException("動画ファイルが見つかりません", path);
+            throw new FileNotFoundException("素材ファイルが見つかりません", path);
 
         var item = new NetaItem
         {
@@ -284,7 +303,7 @@ public sealed class EngineSession : IDisposable
         bool forceToHead = false)
     {
         if (string.IsNullOrWhiteSpace(item.Path) || !File.Exists(item.Path))
-            throw new FileNotFoundException("動画ファイルが見つかりません", item.Path);
+            throw new FileNotFoundException("素材ファイルが見つかりません", item.Path);
 
         // 同一ネタの再選択: 通常は何もしない。forceToHead なら先頭へ戻す。
         if (string.Equals(CurrentPath, item.Path, StringComparison.OrdinalIgnoreCase))
@@ -564,9 +583,20 @@ public sealed class EngineSession : IDisposable
         if (CurrentPath is null)
             return;
 
+        CancelImageLoopAdvance();
         ClearStrokes();
         IsPlaying = true;
         ApplyMutePolicy();
+
+        if (IsImageFile(CurrentPath))
+        {
+            ForcePausedFrameRefresh(OperatorPlayer, ClockRate);
+            if (RemoteNetaLoopService.Instance.IsRunning)
+                ScheduleImageLoopAdvance();
+            PlaybackStateChanged?.Invoke();
+            return;
+        }
+
         OperatorPlayer.PlaybackSession.PlaybackRate = ClockRate;
         OperatorPlayer.Play();
         PlaybackStateChanged?.Invoke();
@@ -574,6 +604,7 @@ public sealed class EngineSession : IDisposable
 
     public void Pause()
     {
+        CancelImageLoopAdvance();
         OperatorPlayer.Pause();
         IsPlaying = false;
         ApplyMutePolicy();
@@ -880,7 +911,7 @@ public sealed class EngineSession : IDisposable
         pair.Player.Source = MediaSource.CreateFromStorageFile(file);
         pair.Path = path;
 
-        await WaitForOpenedAsync(pair.Player, cancellationToken).ConfigureAwait(false);
+        await WaitForOpenedAsync(pair.Player, cancellationToken, path).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
 
         ThrowIfMediaUnusable(pair.Player, playbackPath, error.Error);
@@ -921,10 +952,21 @@ public sealed class EngineSession : IDisposable
         }
 
         // サムネ（シェル）は出ても、MF がデコードできないと duration が 0 のまま黒画面になる
-        if (player.PlaybackSession.NaturalDuration <= TimeSpan.Zero)
+        if (!IsImageFile(path) && player.PlaybackSession.NaturalDuration <= TimeSpan.Zero)
         {
             throw new InvalidOperationException(
                 BuildUnsupportedMediaMessage(path, "デコーダーが動画を開けませんでした"));
+        }
+
+        if (IsImageFile(path))
+        {
+            var w = player.PlaybackSession.NaturalVideoWidth;
+            var h = player.PlaybackSession.NaturalVideoHeight;
+            if (w <= 0 || h <= 0)
+            {
+                throw new InvalidOperationException(
+                    BuildUnsupportedMediaMessage(path, "画像を表示できませんでした"));
+            }
         }
     }
 
@@ -999,14 +1041,17 @@ public sealed class EngineSession : IDisposable
         }
     }
 
-    private static async Task WaitForOpenedAsync(MediaPlayer player, CancellationToken cancellationToken = default)
+    private static async Task WaitForOpenedAsync(
+        MediaPlayer player,
+        CancellationToken cancellationToken = default,
+        string? path = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         var session = player.PlaybackSession;
         if (session.PlaybackState is not MediaPlaybackState.Opening)
         {
-            await WaitForMediaReadyAsync(player, cancellationToken).ConfigureAwait(false);
+            await WaitForMediaReadyAsync(player, cancellationToken, path).ConfigureAwait(false);
             return;
         }
 
@@ -1029,7 +1074,7 @@ public sealed class EngineSession : IDisposable
             or MediaPlaybackState.None)
         {
             session.PlaybackStateChanged -= Handler;
-            await WaitForMediaReadyAsync(player, cancellationToken).ConfigureAwait(false);
+            await WaitForMediaReadyAsync(player, cancellationToken, path).ConfigureAwait(false);
             return;
         }
 
@@ -1038,10 +1083,13 @@ public sealed class EngineSession : IDisposable
             session.PlaybackStateChanged -= Handler;
 
         cancellationToken.ThrowIfCancellationRequested();
-        await WaitForMediaReadyAsync(player, cancellationToken).ConfigureAwait(false);
+        await WaitForMediaReadyAsync(player, cancellationToken, path).ConfigureAwait(false);
     }
 
-    private static async Task WaitForMediaReadyAsync(MediaPlayer player, CancellationToken cancellationToken)
+    private static async Task WaitForMediaReadyAsync(
+        MediaPlayer player,
+        CancellationToken cancellationToken,
+        string? path = null)
     {
         var session = player.PlaybackSession;
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
@@ -1054,16 +1102,72 @@ public sealed class EngineSession : IDisposable
             if (duration > TimeSpan.Zero)
                 break;
 
+            if (path is not null && IsImageFile(path))
+            {
+                if (session.NaturalVideoWidth > 0 && session.NaturalVideoHeight > 0)
+                    break;
+            }
+
             await Task.Delay(16, cancellationToken).ConfigureAwait(false);
         }
 
         await Task.Delay(32, cancellationToken).ConfigureAwait(false);
     }
 
+    private void CancelImageLoopAdvance()
+    {
+        try { _imageLoopCts?.Cancel(); } catch { /* ignore */ }
+        _imageLoopCts?.Dispose();
+        _imageLoopCts = null;
+    }
+
+    private void ScheduleImageLoopAdvance()
+    {
+        CancelImageLoopAdvance();
+        _imageLoopCts = new CancellationTokenSource();
+        var token = _imageLoopCts.Token;
+        var path = CurrentPath;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(ImageLoopHoldMs, token).ConfigureAwait(false);
+                if (token.IsCancellationRequested || _disposed)
+                    return;
+
+                var dq = App.DispatcherQueue;
+                if (dq is null)
+                    return;
+
+                dq.TryEnqueue(() =>
+                {
+                    if (_disposed || !IsPlaying || path is null)
+                        return;
+                    if (!string.Equals(CurrentPath, path, StringComparison.OrdinalIgnoreCase))
+                        return;
+                    if (!IsImageFile(path))
+                        return;
+                    if (!RemoteNetaLoopService.Instance.IsRunning)
+                        return;
+
+                    Pause();
+                    MediaEnded?.Invoke();
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                // loop cancelled
+            }
+        }, token);
+    }
+
     public void Dispose()
     {
         if (_disposed)
             return;
+
+        CancelImageLoopAdvance();
 
         _disposed = true;
         _warmCts?.Cancel();

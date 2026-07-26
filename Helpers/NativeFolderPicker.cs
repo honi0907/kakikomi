@@ -18,13 +18,15 @@ internal static class NativeFolderPicker
 
     private static readonly (string Name, string Spec)[] VideoFilters =
     [
+        ("動画・画像", "*.mp4;*.mov;*.mkv;*.wmv;*.avi;*.m4v;*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tif;*.tiff"),
         ("動画", "*.mp4;*.mov;*.mkv;*.wmv;*.avi;*.m4v"),
+        ("画像", "*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tif;*.tiff"),
         ("すべてのファイル", "*.*")
     ];
 
     public static string? PickFolder(
         IntPtr ownerHwnd,
-        string title = "ネタ動画フォルダを選択",
+        string title = "ネタフォルダを選択",
         string? initialPath = null)
     {
         var dialog = CreateDialog();
@@ -104,7 +106,7 @@ internal static class NativeFolderPicker
     /// <summary>複数の動画ファイルを選択。キャンセル時は空配列。</summary>
     public static IReadOnlyList<string> PickVideoFiles(
         IntPtr ownerHwnd,
-        string title = "ネタ動画を選択",
+        string title = "ネタを選択",
         string? initialPath = null)
     {
         var dialog = CreateDialog();

@@ -27,6 +27,12 @@ public static class VideoThumbnailLoader
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (EngineSession.IsImageFile(item.Path))
+                {
+                    await LoadImageThumbnailAsync(item, cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+
                 var file = await StorageFile.GetFileFromPathAsync(item.Path);
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -89,6 +95,64 @@ public static class VideoThumbnailLoader
         {
             // 一覧差し替え時
         }
+    }
+
+    private static async Task LoadImageThumbnailAsync(NetaItem item, CancellationToken cancellationToken)
+    {
+        StorageFile file;
+        try
+        {
+            file = await StorageFile.GetFileFromPathAsync(item.Path);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Thumbnail/image] {item.Path}: {ex.Message}");
+            return;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        IRandomAccessStream? stream = null;
+        try
+        {
+            stream = await file.OpenAsync(FileAccessMode.Read).AsTask(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Thumbnail/image] open: {ex.Message}");
+            return;
+        }
+
+        var dq = App.DispatcherQueue;
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!dq.TryEnqueue(async () =>
+            {
+                try
+                {
+                    item.FrameRateLabel = "静止画";
+                    if (stream is not null)
+                    {
+                        var bmp = new BitmapImage();
+                        await bmp.SetSourceAsync(stream);
+                        item.Thumbnail = bmp;
+                    }
+
+                    tcs.TrySetResult();
+                }
+                catch (Exception ex)
+                {
+                    tcs.TrySetException(ex);
+                }
+                finally
+                {
+                    stream?.Dispose();
+                }
+            }))
+        {
+            stream?.Dispose();
+            tcs.TrySetCanceled();
+        }
+
+        await tcs.Task.ConfigureAwait(false);
     }
 
     private static async Task<string?> TryReadFrameRateLabelAsync(
