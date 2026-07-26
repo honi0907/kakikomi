@@ -2,7 +2,6 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using Microsoft.Graphics.Canvas;
-using Microsoft.UI.Dispatching;
 using Windows.Foundation;
 using Windows.Media.Playback;
 
@@ -10,7 +9,7 @@ namespace Kakikomi.Services;
 
 /// <summary>
 /// Operator 映像を縮小 JPEG 化して遠隔へ送る。
-/// MediaFramePump には購読せず <see cref="VideoFrameRelay"/> から参照する（本番映像を優先）。
+/// MediaFramePump には購読せず <see cref="VideoFrameRelay"/> のイベントで拾う（本番映像を優先）。
 /// </summary>
 internal sealed class RemotePreviewCapture : IDisposable
 {
@@ -24,10 +23,8 @@ internal sealed class RemotePreviewCapture : IDisposable
 
     private readonly Action<byte[]> _onJpeg;
     private readonly object _gate = new();
-    private readonly CanvasDevice _previewDevice = new();
 
     private EngineSession? _engine;
-    private DispatcherQueueTimer? _pollTimer;
     private MediaPlayer? _targetPlayer;
     private CanvasRenderTarget? _scaled;
     private int _scaledW;
@@ -43,6 +40,7 @@ internal sealed class RemotePreviewCapture : IDisposable
     private int _previewFailures;
     private long _circuitOpenUntil;
     private long _lastFailureLogMs;
+    private bool _handlerRegistered;
     private bool _disposed;
 
     public RemotePreviewCapture(Action<byte[]> onJpeg)
@@ -65,15 +63,17 @@ internal sealed class RemotePreviewCapture : IDisposable
 
     public void SetClientsConnected(bool connected)
     {
-        var was = Interlocked.Exchange(ref _clientsConnected, connected ? 1 : 0);
         if (connected)
         {
-            EnsurePollTimer();
+            Interlocked.Exchange(ref _clientsConnected, 1);
+            RegisterHandler();
             ArmForceCapture();
+            TryCaptureFromRelay(force: true);
         }
-        else if (was == 1)
+        else
         {
-            StopPollTimer();
+            Interlocked.Exchange(ref _clientsConnected, 0);
+            UnregisterHandler();
         }
     }
 
@@ -83,6 +83,8 @@ internal sealed class RemotePreviewCapture : IDisposable
             return;
         _disposed = true;
 
+        UnregisterHandler();
+
         if (_engine is not null)
         {
             _engine.VisibleSlotChanged -= OnVisibleSlotChanged;
@@ -90,14 +92,27 @@ internal sealed class RemotePreviewCapture : IDisposable
             _engine.PreviewKeyframeRequested -= OnKeyframeRequested;
         }
 
-        StopPollTimer();
         lock (_gate)
         {
             try { _scaled?.Dispose(); } catch { /* ignore */ }
             _scaled = null;
         }
+    }
 
-        try { _previewDevice.Dispose(); } catch { /* ignore */ }
+    private void RegisterHandler()
+    {
+        if (_handlerRegistered)
+            return;
+        VideoFrameRelay.FramePublished += OnRelayFramePublished;
+        _handlerRegistered = true;
+    }
+
+    private void UnregisterHandler()
+    {
+        if (!_handlerRegistered)
+            return;
+        VideoFrameRelay.FramePublished -= OnRelayFramePublished;
+        _handlerRegistered = false;
     }
 
     private void OnVisibleSlotChanged(int slot)
@@ -125,6 +140,7 @@ internal sealed class RemotePreviewCapture : IDisposable
         if (Volatile.Read(ref _clientsConnected) != 1)
             return;
         ArmForceCapture();
+        TryCaptureFromRelay(force: true);
     }
 
     private void UpdateTargetPlayer(int slot)
@@ -154,35 +170,34 @@ internal sealed class RemotePreviewCapture : IDisposable
         ScheduleForceRetries(gen);
     }
 
-    private void EnsurePollTimer()
+    private void OnRelayFramePublished(MediaPlayer player, CanvasRenderTarget target, int width, int height)
     {
-        if (_pollTimer is not null)
+        if (_disposed || Volatile.Read(ref _clientsConnected) != 1)
             return;
 
-        var dq = App.DispatcherQueue;
-        if (dq is null)
+        var targetPlayer = _targetPlayer;
+        if (targetPlayer is null || !ReferenceEquals(player, targetPlayer))
             return;
 
-        _pollTimer = dq.CreateTimer();
-        _pollTimer.Interval = TimeSpan.FromMilliseconds(IdleIntervalMs);
-        _pollTimer.IsRepeating = true;
-        _pollTimer.Tick += OnPollTimerTick;
-        _pollTimer.Start();
+        TryCaptureFrame(target, width, height, force: false);
     }
 
-    private void StopPollTimer()
+    private void TryCaptureFromRelay(bool force)
     {
-        if (_pollTimer is null)
+        var player = _targetPlayer;
+        if (player is null)
             return;
 
-        _pollTimer.Stop();
-        _pollTimer.Tick -= OnPollTimerTick;
-        _pollTimer = null;
+        if (!VideoFrameRelay.TryGetFrame(player, out var target, out var width, out var height, out _))
+            return;
+
+        if (target is null)
+            return;
+
+        TryCaptureFrame(target, width, height, force);
     }
 
-    private void OnPollTimerTick(DispatcherQueueTimer sender, object args) => PollRelay();
-
-    private void PollRelay()
+    private void TryCaptureFrame(CanvasRenderTarget target, int width, int height, bool force)
     {
         if (_disposed || Volatile.Read(ref _clientsConnected) != 1)
             return;
@@ -193,20 +208,7 @@ internal sealed class RemotePreviewCapture : IDisposable
         if (now < Interlocked.Read(ref _pauseUntilTicks))
             return;
 
-        var player = _targetPlayer;
-        if (player is null)
-            return;
-
-        if (!VideoFrameRelay.TryGetFrame(player, out var target, out var width, out var height, out var sequence))
-            return;
-
-        if (target is null || width <= 0 || height <= 0)
-            return;
-
-        var force = Volatile.Read(ref _forceNext) == 1;
-        if (!force && sequence == Interlocked.Read(ref _lastRelaySequence))
-            return;
-
+        force = force || Volatile.Read(ref _forceNext) == 1;
         var playing = _engine?.IsPlaying == true;
         var minInterval = playing ? PlayingIntervalMs : IdleIntervalMs;
         if (!force && now - Interlocked.Read(ref _lastEncodeTicks) < minInterval)
@@ -215,8 +217,51 @@ internal sealed class RemotePreviewCapture : IDisposable
         if (Interlocked.Exchange(ref _encoding, 1) == 1)
             return;
 
-        Interlocked.Exchange(ref _lastRelaySequence, sequence);
-        TryEncodeFrame(target, width, height, now);
+        byte[]? bgra = null;
+        var outW = 0;
+        var outH = 0;
+
+        try
+        {
+            Interlocked.Exchange(ref _lastEncodeTicks, now);
+            if (!TryDownsample(target, width, height, out bgra, out outW, out outH) || bgra is null)
+            {
+                NotePreviewFailure("downsample empty");
+                Interlocked.Exchange(ref _encoding, 0);
+                return;
+            }
+
+            Interlocked.Exchange(ref _forceNext, 0);
+            Interlocked.Exchange(ref _previewFailures, 0);
+            Interlocked.Increment(ref _lastRelaySequence);
+        }
+        catch (Exception ex)
+        {
+            NotePreviewFailure(ex.Message);
+            Interlocked.Exchange(ref _encoding, 0);
+            return;
+        }
+
+        var pixels = bgra;
+        var w = outW;
+        var h = outH;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                var jpeg = EncodeJpegFromBgra(pixels, w, h);
+                if (jpeg is { Length: > 0 })
+                    _onJpeg(jpeg);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RemotePreview] jpeg: {ex.Message}");
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _encoding, 0);
+            }
+        });
     }
 
     private void ScheduleForceRetries(int generation)
@@ -253,63 +298,17 @@ internal sealed class RemotePreviewCapture : IDisposable
                             return;
                         if (Volatile.Read(ref _forceNext) == 0)
                             return;
-                        if (engine.IsPlaying)
-                            return;
-                        engine.RequestPausedFrameRefresh();
+
+                        if (!engine.IsPlaying)
+                            engine.RequestPausedFrameRefresh();
+
+                        TryCaptureFromRelay(force: true);
                     });
                 }
             }
             finally
             {
                 Interlocked.Exchange(ref _retryScheduled, 0);
-            }
-        });
-    }
-
-    private void TryEncodeFrame(CanvasRenderTarget target, int width, int height, long now)
-    {
-        byte[]? bgra = null;
-        var outW = 0;
-        var outH = 0;
-
-        try
-        {
-            Interlocked.Exchange(ref _lastEncodeTicks, now);
-            if (!TryDownsample(target, width, height, out bgra, out outW, out outH) || bgra is null)
-            {
-                NotePreviewFailure("downsample empty");
-                Interlocked.Exchange(ref _encoding, 0);
-                return;
-            }
-
-            Interlocked.Exchange(ref _forceNext, 0);
-            Interlocked.Exchange(ref _previewFailures, 0);
-        }
-        catch (Exception ex)
-        {
-            NotePreviewFailure(ex.Message);
-            Interlocked.Exchange(ref _encoding, 0);
-            return;
-        }
-
-        var pixels = bgra;
-        var w = outW;
-        var h = outH;
-        _ = Task.Run(() =>
-        {
-            try
-            {
-                var jpeg = EncodeJpegFromBgra(pixels, w, h);
-                if (jpeg is { Length: > 0 })
-                    _onJpeg(jpeg);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[RemotePreview] jpeg: {ex.Message}");
-            }
-            finally
-            {
-                Interlocked.Exchange(ref _encoding, 0);
             }
         });
     }
@@ -351,7 +350,10 @@ internal sealed class RemotePreviewCapture : IDisposable
             if (_scaled is null || _scaledW != outW || _scaledH != outH)
             {
                 try { _scaled?.Dispose(); } catch { /* ignore */ }
-                _scaled = new CanvasRenderTarget(_previewDevice, outW, outH, 96);
+                var device = CanvasDevice.GetSharedDevice();
+                if (device.IsDeviceLost())
+                    device = new CanvasDevice();
+                _scaled = new CanvasRenderTarget(device, outW, outH, 96);
                 _scaledW = outW;
                 _scaledH = outH;
             }
