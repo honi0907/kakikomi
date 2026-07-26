@@ -35,6 +35,8 @@ public sealed class PerfMonitorService : IDisposable
     private bool _disposed;
     private bool _cleanupDone;
     private bool _logSession;
+    private string? _lastEventKey;
+    private long _lastEventLogMs;
 
     public event Action? Updated;
 
@@ -187,6 +189,16 @@ public sealed class PerfMonitorService : IDisposable
         var force = upper is "WARN" or "ERROR" or "FATAL";
         if (!force && !AppSettings.PerfLogEnabled)
             return;
+
+        var now = Environment.TickCount64;
+        lock (_gate)
+        {
+            if (force && _lastEventKey == message && now - _lastEventLogMs < 5_000)
+                return;
+            _lastEventKey = message;
+            _lastEventLogMs = now;
+        }
+
         AppendLog(upper, message, force: true);
     }
 
@@ -244,6 +256,8 @@ public sealed class PerfMonitorService : IDisposable
 
             if (AppSettings.PerfLogEnabled && _logSession)
                 MaybeWriteLog(cpu, memMb, frames, bytes / 1024.0, nowMs);
+
+            VideoPipelineRecovery.TickHealthCheck();
         }
         catch (Exception ex)
         {

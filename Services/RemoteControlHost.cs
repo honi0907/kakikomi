@@ -173,6 +173,8 @@ public sealed class RemoteControlHost : IDisposable
                 break;
             }
 
+            VideoPipelineRecovery.TickHealthCheck();
+
             var json = JsonSerializer.Serialize(RemoteControlBridge.BuildStatus(), JsonOptions);
             foreach (var client in _clients.Values)
             {

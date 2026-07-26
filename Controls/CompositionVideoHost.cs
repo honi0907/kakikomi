@@ -30,7 +30,6 @@ public sealed class CompositionVideoHost : Grid
     private int _pendingWidth;
     private int _pendingHeight;
     private int _drawFailures;
-    private long _lastRecoverLogMs;
 
     public CompositionVideoHost()
     {
@@ -43,7 +42,12 @@ public sealed class CompositionVideoHost : Grid
         };
         Children.Add(_image);
 
-        Unloaded += (_, _) => Detach();
+        CompositionVideoHostRegistry.Register(this);
+        Unloaded += (_, _) =>
+        {
+            CompositionVideoHostRegistry.Unregister(this);
+            Detach();
+        };
     }
 
     public void Attach(MediaPlayer? player)
@@ -179,6 +183,7 @@ public sealed class CompositionVideoHost : Grid
             using var session = _imageSource.CreateDrawingSession(Color.FromArgb(255, 0, 0, 0));
             session.DrawImage(target);
             _drawFailures = 0;
+            VideoPipelineRecovery.NotifyFrameDelivered();
         }
         catch (Exception ex)
         {
@@ -189,14 +194,7 @@ public sealed class CompositionVideoHost : Grid
             if (_drawFailures >= 3)
             {
                 _drawFailures = 0;
-                var now = Environment.TickCount64;
-                if (now - _lastRecoverLogMs >= 5_000)
-                {
-                    _lastRecoverLogMs = now;
-                    PerfMonitorService.Instance.LogEvent(
-                        "WARN",
-                        $"CompositionVideoHost rebind after draw fail: {ex.Message}");
-                }
+                VideoPipelineRecovery.NotifyDrawFailure(ex.Message);
 
                 ForceRebind();
             }

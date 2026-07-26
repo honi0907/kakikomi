@@ -402,10 +402,74 @@ public sealed class EngineSession : IDisposable
     {
         if (CurrentPath is null || _disposed)
             return;
-        // 再生中に呼ぶと Play→Pause で止まってしまうのでスキップ
         if (IsPlaying)
             return;
         ForcePausedFrameRefresh(OperatorPlayer, ClockRate);
+    }
+
+    /// <summary>再生中に Frame Server を再起動する（一時停止しない）。</summary>
+    public void RequestPlayingFrameRefresh()
+    {
+        if (CurrentPath is null || _disposed || !IsPlaying)
+            return;
+
+        try
+        {
+            var player = OperatorPlayer;
+            player.IsVideoFrameServerEnabled = false;
+            player.IsVideoFrameServerEnabled = true;
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+
+    /// <summary>映像経路の最終手段: いまのネタを同位置で再オープン。</summary>
+    public async Task RecoverVideoPipelineAsync(CancellationToken cancellationToken = default)
+    {
+        if (CurrentPath is null || _disposed)
+            return;
+
+        var path = CurrentPath;
+        var position = TimelinePosition;
+        var wasPlaying = IsPlaying;
+        var rate = ClockRate;
+        var slot = _visibleSlotIndex;
+        var pair = _displayPairs[slot];
+
+        if (wasPlaying)
+            Pause();
+
+        try
+        {
+            pair.ClearSource();
+            await PreparePairAtStartAsync(pair, path, cancellationToken).ConfigureAwait(true);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            pair.Player.PlaybackSession.Position = position;
+            SetRate(rate);
+            ApplyMutePolicy();
+
+            VisibleSlotChanged?.Invoke(slot);
+            PlaybackStateChanged?.Invoke();
+            TimelineChanged?.Invoke();
+
+            if (wasPlaying)
+                Play();
+            else
+                ForcePausedFrameRefresh(pair.Player, rate);
+
+            RequestPreviewKeyframe(withRetries: false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            PerfMonitorService.Instance.LogEvent("WARN", $"RecoverVideoPipeline: {ex.Message}");
+        }
     }
 
     private void RequestPreviewKeyframe(bool withRetries)

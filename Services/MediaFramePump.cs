@@ -6,10 +6,8 @@ using Windows.Media.Playback;
 namespace Kakikomi.Services;
 
 /// <summary>
-/// MediaPlayer の Frame Server 出力を1回だけ Copy し、購読ホストへ配信する。
-/// ホストごとに CopyFrame すると2回目以降が空フレームになることがある。
-/// 描画中の上書きを避けるためダブルバッファする。
-/// Copy / デバイス失敗が続く場合はバッファ再生成とフック張り直しで自己復帰する。
+/// MediaPlayer の Frame Server 出力を1回だけ Copy し、本番表示ホストへ配信する。
+/// 遠隔プレビューは <see cref="VideoFrameRelay"/> 経由で参照し、購読者（sinks）には含めない。
 /// </summary>
 internal static class MediaFramePump
 {
@@ -26,7 +24,7 @@ internal static class MediaFramePump
 
     private sealed class Pump
     {
-        private const int FailuresBeforeReset = 3;
+        private const int FailuresBeforeRecover = 3;
 
         private readonly MediaPlayer _player;
         private readonly object _gate = new();
@@ -80,7 +78,7 @@ internal static class MediaFramePump
             }
             catch (Exception ex)
             {
-                LogWarn($"hook failed: {ex.Message}");
+                LogWarnThrottled($"hook failed: {ex.Message}");
             }
         }
 
@@ -129,7 +127,7 @@ internal static class MediaFramePump
 
                     if (!EnsureBuffers_NoLock(width, height))
                     {
-                        NoteFailure_NoLock("buffers");
+                        NoteFailure_NoLock(sender, "buffers");
                         return;
                     }
 
@@ -141,6 +139,7 @@ internal static class MediaFramePump
                     _consecutiveFailures = 0;
                 }
 
+                // 本番表示を最優先
                 foreach (var sink in sinks)
                 {
                     try
@@ -152,12 +151,15 @@ internal static class MediaFramePump
                         System.Diagnostics.Debug.WriteLine($"[MediaFramePump] sink: {ex.Message}");
                     }
                 }
+
+                // 遠隔プレビューは購読ではなくリレー参照（Copy は増やさない）
+                VideoFrameRelay.Publish(sender, readable, width, height);
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[MediaFramePump] copy: {ex.Message}");
                 lock (_gate)
-                    NoteFailure_NoLock($"copy: {ex.Message}");
+                    NoteFailure_NoLock(sender, $"copy: {ex.Message}", ex);
             }
             finally
             {
@@ -165,14 +167,17 @@ internal static class MediaFramePump
             }
         }
 
-        private void NoteFailure_NoLock(string reason)
+        private void NoteFailure_NoLock(MediaPlayer player, string reason, Exception? ex = null)
         {
             _consecutiveFailures++;
-            if (_consecutiveFailures < FailuresBeforeReset)
+            if (_consecutiveFailures < FailuresBeforeRecover)
                 return;
 
             _consecutiveFailures = 0;
             Recover_NoLock(reason);
+
+            if (ex is not null)
+                VideoPipelineRecovery.NotifyCopyFailure(player, ex);
         }
 
         private void Recover_NoLock(string reason)
@@ -181,7 +186,8 @@ internal static class MediaFramePump
             if (now - _lastRecoverLogMs >= 5_000)
             {
                 _lastRecoverLogMs = now;
-                LogWarn($"recover sinks={_sinks.Count} reason={reason}");
+                lock (_gate)
+                    LogWarnThrottled($"recover sinks={_sinks.Count} reason={reason}");
             }
 
             Unhook_NoLock();
@@ -220,23 +226,19 @@ internal static class MediaFramePump
                     _bufferA = new CanvasRenderTarget(device, width, height, 96);
                     _bufferB = new CanvasRenderTarget(device, width, height, 96);
                     _writeA = true;
-                    LogWarn($"buffers recreated with fallback device ({width}x{height})");
+                    LogWarnThrottled($"buffers recreated with fallback device ({width}x{height})");
                     return true;
                 }
                 catch (Exception ex2)
                 {
-                    LogWarn($"buffers failed: {ex.Message} / {ex2.Message}");
+                    LogWarnThrottled($"buffers failed: {ex.Message} / {ex2.Message}");
                     DisposeBuffers_NoLock();
                     return false;
                 }
             }
         }
 
-        private static CanvasDevice CreateFallbackDevice()
-        {
-            // 共有デバイスがロストしている場合の退避。専用デバイスを新規作成する。
-            return new CanvasDevice();
-        }
+        private static CanvasDevice CreateFallbackDevice() => new();
 
         private void DisposeBuffers_NoLock()
         {
@@ -248,7 +250,7 @@ internal static class MediaFramePump
             _height = 0;
         }
 
-        private static void LogWarn(string message) =>
+        private static void LogWarnThrottled(string message) =>
             PerfMonitorService.Instance.LogEvent("WARN", "MediaFramePump " + message);
 
         private sealed class SinkSubscription : IDisposable

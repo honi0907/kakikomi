@@ -2,6 +2,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using Microsoft.Graphics.Canvas;
+using Microsoft.UI.Dispatching;
 using Windows.Foundation;
 using Windows.Media.Playback;
 
@@ -9,21 +10,25 @@ namespace Kakikomi.Services;
 
 /// <summary>
 /// Operator 映像を縮小 JPEG 化して遠隔へ送る。
-/// ブラウザ未接続では購読しない。再生中は間引き、ネタ切替直後は一時休止。
+/// MediaFramePump には購読せず <see cref="VideoFrameRelay"/> から参照する（本番映像を優先）。
 /// </summary>
 internal sealed class RemotePreviewCapture : IDisposable
 {
     private const int TargetWidth = 480;
-    private const int IdleIntervalMs = 80; // ポーズ時 ~12.5 fps
-    private const int PlayingIntervalMs = 200; // 再生中 ~5 fps
+    private const int IdleIntervalMs = 80;
+    private const int PlayingIntervalMs = 200;
     private const int SwitchPauseMs = 450;
+    private const int CircuitBreakerFailures = 5;
+    private const int CircuitBreakerCooldownMs = 60_000;
     private const long JpegQuality = 35;
 
     private readonly Action<byte[]> _onJpeg;
     private readonly object _gate = new();
-    private IDisposable? _subscription;
-    private MediaPlayer? _subscribedPlayer;
+    private readonly CanvasDevice _previewDevice = new();
+
     private EngineSession? _engine;
+    private DispatcherQueueTimer? _pollTimer;
+    private MediaPlayer? _targetPlayer;
     private CanvasRenderTarget? _scaled;
     private int _scaledW;
     private int _scaledH;
@@ -33,7 +38,11 @@ internal sealed class RemotePreviewCapture : IDisposable
     private int _retryScheduled;
     private long _lastEncodeTicks;
     private long _pauseUntilTicks;
+    private long _lastRelaySequence;
     private int _clientsConnected;
+    private int _previewFailures;
+    private long _circuitOpenUntil;
+    private long _lastFailureLogMs;
     private bool _disposed;
 
     public RemotePreviewCapture(Action<byte[]> onJpeg)
@@ -51,7 +60,7 @@ internal sealed class RemotePreviewCapture : IDisposable
         engine.VisibleSlotChanged += OnVisibleSlotChanged;
         engine.SourceChanged += OnSourceChanged;
         engine.PreviewKeyframeRequested += OnKeyframeRequested;
-        // クライアント接続まで MediaFramePump に相乗りしない
+        UpdateTargetPlayer(engine.VisibleSlotIndex);
     }
 
     public void SetClientsConnected(bool connected)
@@ -59,13 +68,12 @@ internal sealed class RemotePreviewCapture : IDisposable
         var was = Interlocked.Exchange(ref _clientsConnected, connected ? 1 : 0);
         if (connected)
         {
-            var engine = _engine;
-            if (engine is not null)
-                Resubscribe(engine.VisibleSlotIndex, force: true);
+            EnsurePollTimer();
+            ArmForceCapture();
         }
         else if (was == 1)
         {
-            Unsubscribe();
+            StopPollTimer();
         }
     }
 
@@ -82,27 +90,34 @@ internal sealed class RemotePreviewCapture : IDisposable
             _engine.PreviewKeyframeRequested -= OnKeyframeRequested;
         }
 
-        Unsubscribe();
+        StopPollTimer();
         lock (_gate)
         {
             try { _scaled?.Dispose(); } catch { /* ignore */ }
             _scaled = null;
         }
+
+        try { _previewDevice.Dispose(); } catch { /* ignore */ }
     }
 
     private void OnVisibleSlotChanged(int slot)
     {
         PauseCaptureBriefly();
+        UpdateTargetPlayer(slot);
         if (Volatile.Read(ref _clientsConnected) == 1)
-            Resubscribe(slot, force: true);
+            ArmForceCapture();
     }
 
     private void OnSourceChanged()
     {
         PauseCaptureBriefly();
         var engine = _engine;
-        if (engine is not null && Volatile.Read(ref _clientsConnected) == 1)
-            Resubscribe(engine.VisibleSlotIndex, force: true);
+        if (engine is not null)
+        {
+            UpdateTargetPlayer(engine.VisibleSlotIndex);
+            if (Volatile.Read(ref _clientsConnected) == 1)
+                ArmForceCapture();
+        }
     }
 
     private void OnKeyframeRequested()
@@ -110,6 +125,22 @@ internal sealed class RemotePreviewCapture : IDisposable
         if (Volatile.Read(ref _clientsConnected) != 1)
             return;
         ArmForceCapture();
+    }
+
+    private void UpdateTargetPlayer(int slot)
+    {
+        var engine = _engine;
+        if (engine is null)
+            return;
+
+        try
+        {
+            _targetPlayer = engine.GetOperatorPlayerForSlot(slot);
+        }
+        catch
+        {
+            _targetPlayer = null;
+        }
     }
 
     private void PauseCaptureBriefly() =>
@@ -123,48 +154,69 @@ internal sealed class RemotePreviewCapture : IDisposable
         ScheduleForceRetries(gen);
     }
 
-    private void Unsubscribe()
+    private void EnsurePollTimer()
     {
-        lock (_gate)
-        {
-            _subscription?.Dispose();
-            _subscription = null;
-            _subscribedPlayer = null;
-        }
+        if (_pollTimer is not null)
+            return;
+
+        var dq = App.DispatcherQueue;
+        if (dq is null)
+            return;
+
+        _pollTimer = dq.CreateTimer();
+        _pollTimer.Interval = TimeSpan.FromMilliseconds(IdleIntervalMs);
+        _pollTimer.IsRepeating = true;
+        _pollTimer.Tick += OnPollTimerTick;
+        _pollTimer.Start();
     }
 
-    private void Resubscribe(int slot, bool force)
+    private void StopPollTimer()
+    {
+        if (_pollTimer is null)
+            return;
+
+        _pollTimer.Stop();
+        _pollTimer.Tick -= OnPollTimerTick;
+        _pollTimer = null;
+    }
+
+    private void OnPollTimerTick(DispatcherQueueTimer sender, object args) => PollRelay();
+
+    private void PollRelay()
     {
         if (_disposed || Volatile.Read(ref _clientsConnected) != 1)
             return;
 
-        var engine = _engine;
-        if (engine is null)
+        var now = Environment.TickCount64;
+        if (now < Volatile.Read(ref _circuitOpenUntil))
+            return;
+        if (now < Interlocked.Read(ref _pauseUntilTicks))
             return;
 
-        MediaPlayer player;
-        try
-        {
-            player = engine.GetOperatorPlayerForSlot(slot);
-        }
-        catch
-        {
+        var player = _targetPlayer;
+        if (player is null)
             return;
-        }
 
-        lock (_gate)
-        {
-            // 同一プレイヤーなら張り直さない（頭出しコマを落とす主因だった）
-            if (!ReferenceEquals(_subscribedPlayer, player) || _subscription is null)
-            {
-                _subscription?.Dispose();
-                _subscribedPlayer = player;
-                _subscription = MediaFramePump.Subscribe(player, OnFrame);
-            }
-        }
+        if (!VideoFrameRelay.TryGetFrame(player, out var target, out var width, out var height, out var sequence))
+            return;
 
-        if (force)
-            ArmForceCapture();
+        if (target is null || width <= 0 || height <= 0)
+            return;
+
+        var force = Volatile.Read(ref _forceNext) == 1;
+        if (!force && sequence == Interlocked.Read(ref _lastRelaySequence))
+            return;
+
+        var playing = _engine?.IsPlaying == true;
+        var minInterval = playing ? PlayingIntervalMs : IdleIntervalMs;
+        if (!force && now - Interlocked.Read(ref _lastEncodeTicks) < minInterval)
+            return;
+
+        if (Interlocked.Exchange(ref _encoding, 1) == 1)
+            return;
+
+        Interlocked.Exchange(ref _lastRelaySequence, sequence);
+        TryEncodeFrame(target, width, height, now);
     }
 
     private void ScheduleForceRetries(int generation)
@@ -214,26 +266,8 @@ internal sealed class RemotePreviewCapture : IDisposable
         });
     }
 
-    private void OnFrame(CanvasRenderTarget target, int width, int height)
+    private void TryEncodeFrame(CanvasRenderTarget target, int width, int height, long now)
     {
-        if (_disposed || width <= 0 || height <= 0)
-            return;
-        if (Volatile.Read(ref _clientsConnected) != 1)
-            return;
-
-        var now = Environment.TickCount64;
-        if (now < Interlocked.Read(ref _pauseUntilTicks))
-            return;
-
-        var force = Volatile.Read(ref _forceNext) == 1;
-        var playing = _engine?.IsPlaying == true;
-        var minInterval = playing ? PlayingIntervalMs : IdleIntervalMs;
-        if (!force && now - Interlocked.Read(ref _lastEncodeTicks) < minInterval)
-            return;
-
-        if (Interlocked.Exchange(ref _encoding, 1) == 1)
-            return; // force は立てたまま → リトライで再取得
-
         byte[]? bgra = null;
         var outW = 0;
         var outH = 0;
@@ -243,17 +277,17 @@ internal sealed class RemotePreviewCapture : IDisposable
             Interlocked.Exchange(ref _lastEncodeTicks, now);
             if (!TryDownsample(target, width, height, out bgra, out outW, out outH) || bgra is null)
             {
+                NotePreviewFailure("downsample empty");
                 Interlocked.Exchange(ref _encoding, 0);
                 return;
             }
 
-            // キャプチャ成功。以降のリトライは不要
             Interlocked.Exchange(ref _forceNext, 0);
+            Interlocked.Exchange(ref _previewFailures, 0);
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[RemotePreview] downsample: {ex.Message}");
-            PerfMonitorService.Instance.LogEvent("WARN", $"RemotePreview downsample: {ex.Message}");
+            NotePreviewFailure(ex.Message);
             Interlocked.Exchange(ref _encoding, 0);
             return;
         }
@@ -280,6 +314,26 @@ internal sealed class RemotePreviewCapture : IDisposable
         });
     }
 
+    private void NotePreviewFailure(string detail)
+    {
+        var failures = Interlocked.Increment(ref _previewFailures);
+        var now = Environment.TickCount64;
+        if (now - Volatile.Read(ref _lastFailureLogMs) >= 5_000)
+        {
+            Volatile.Write(ref _lastFailureLogMs, now);
+            PerfMonitorService.Instance.LogEvent("WARN", $"RemotePreview {detail} (failures={failures})");
+        }
+
+        if (failures < CircuitBreakerFailures)
+            return;
+
+        Interlocked.Exchange(ref _previewFailures, 0);
+        Volatile.Write(ref _circuitOpenUntil, now + CircuitBreakerCooldownMs);
+        PerfMonitorService.Instance.LogEvent(
+            "WARN",
+            $"RemotePreview circuit open {CircuitBreakerCooldownMs / 1000}s to protect production video");
+    }
+
     private bool TryDownsample(
         CanvasRenderTarget source,
         int width,
@@ -297,18 +351,7 @@ internal sealed class RemotePreviewCapture : IDisposable
             if (_scaled is null || _scaledW != outW || _scaledH != outH)
             {
                 try { _scaled?.Dispose(); } catch { /* ignore */ }
-                try
-                {
-                    var device = CanvasDevice.GetSharedDevice();
-                    if (device.IsDeviceLost())
-                        device = new CanvasDevice();
-                    _scaled = new CanvasRenderTarget(device, outW, outH, 96);
-                }
-                catch
-                {
-                    _scaled = new CanvasRenderTarget(new CanvasDevice(), outW, outH, 96);
-                }
-
+                _scaled = new CanvasRenderTarget(_previewDevice, outW, outH, 96);
                 _scaledW = outW;
                 _scaledH = outH;
             }
