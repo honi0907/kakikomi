@@ -11,12 +11,14 @@ internal static class VideoPipelineRecovery
     private const int CopyFailuresBeforeLevel2 = 3;
     private const int NoFrameMsBeforeLevel2 = 3_000;
     private const int RecoverCooldownMs = 8_000;
+    private const int FrameResumeTimeoutMs = 4_000;
 
     private static readonly object Gate = new();
     private static int _copyFailures;
     private static int _recoverGeneration;
     private static long _lastRecoverMs;
     private static long _lastFrameMs;
+    private static long _recoverStartedMs;
     private static int _recoverInFlight;
 
     public static void NotifyFrameDelivered()
@@ -72,6 +74,7 @@ internal static class VideoPipelineRecovery
         Interlocked.Exchange(ref _lastRecoverMs, now);
         var generation = Interlocked.Increment(ref _recoverGeneration);
 
+        DiagnosticCaptureService.Instance.RequestCapture(DiagnosticCaptureReason.Anomaly, reason);
         PerfMonitorService.Instance.LogEvent("WARN", $"VideoPipeline recover L{level} reason={reason}");
 
         var dq = App.DispatcherQueue;
@@ -88,11 +91,14 @@ internal static class VideoPipelineRecovery
                 if (generation != Volatile.Read(ref _recoverGeneration))
                     return;
 
-                await RunRecoverAsync(player, level).ConfigureAwait(true);
+                await RunRecoverAsync(player, level, reason).ConfigureAwait(true);
             }
             catch (Exception ex)
             {
                 PerfMonitorService.Instance.LogEvent("WARN", $"VideoPipeline recover failed: {FormatEx(ex)}");
+                DiagnosticCaptureService.Instance.RequestCapture(
+                    DiagnosticCaptureReason.RecoveryFailed,
+                    $"exception:{FormatEx(ex)}");
             }
             finally
             {
@@ -101,17 +107,40 @@ internal static class VideoPipelineRecovery
         });
     }
 
-    private static async Task RunRecoverAsync(MediaPlayer player, int level)
+    private static async Task RunRecoverAsync(MediaPlayer player, int level, string reason)
     {
+        Interlocked.Exchange(ref _recoverStartedMs, Environment.TickCount64);
+        DiagnosticCaptureService.Instance.RequestCapture(DiagnosticCaptureReason.RecoveryStart, reason);
+
         if (level >= 2)
             await Level2Async(player).ConfigureAwait(true);
 
-        var engine = App.Engine;
-        if (engine is null)
+        if (await WaitForFramesAfterRecoverAsync(FrameResumeTimeoutMs).ConfigureAwait(true))
+        {
+            PerfMonitorService.Instance.LogEvent("INFO", "VideoPipeline recover L2 ok");
+            DiagnosticCaptureService.Instance.RequestCapture(DiagnosticCaptureReason.RecoverySuccess, "L2");
             return;
+        }
 
-        if (level >= 3)
+        PerfMonitorService.Instance.LogEvent("WARN", "VideoPipeline recover L2 failed, escalating L3");
+        DiagnosticCaptureService.Instance.RequestCapture(DiagnosticCaptureReason.RecoveryStart, "L3-escalation");
+
+        var engine = App.Engine;
+        if (engine is not null)
+        {
+            Interlocked.Exchange(ref _recoverStartedMs, Environment.TickCount64);
             await engine.RecoverVideoPipelineAsync().ConfigureAwait(true);
+        }
+
+        if (await WaitForFramesAfterRecoverAsync(FrameResumeTimeoutMs).ConfigureAwait(true))
+        {
+            PerfMonitorService.Instance.LogEvent("INFO", "VideoPipeline recover L3 ok");
+            DiagnosticCaptureService.Instance.RequestCapture(DiagnosticCaptureReason.RecoverySuccess, "L3");
+            return;
+        }
+
+        PerfMonitorService.Instance.LogEvent("WARN", "VideoPipeline recover L3 failed");
+        DiagnosticCaptureService.Instance.RequestCapture(DiagnosticCaptureReason.RecoveryFailed, reason);
     }
 
     private static async Task Level2Async(MediaPlayer player)
@@ -137,6 +166,22 @@ internal static class VideoPipelineRecovery
             else
                 engine.RequestPausedFrameRefresh();
         }
+    }
+
+    private static async Task<bool> WaitForFramesAfterRecoverAsync(int timeoutMs)
+    {
+        var started = Interlocked.Read(ref _recoverStartedMs);
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (Environment.TickCount64 < deadline)
+        {
+            var last = Interlocked.Read(ref _lastFrameMs);
+            if (last >= started)
+                return true;
+
+            await Task.Delay(100).ConfigureAwait(true);
+        }
+
+        return false;
     }
 
     private static string FormatEx(Exception ex)

@@ -65,6 +65,8 @@ public sealed partial class MainPage : Page
         SubscribeVisibleSlotUi(ViewModel.Session);
         PerfMonitorService.Instance.Updated += OnPerfMonitorUpdated;
         PerfMonitorService.Instance.ApplyFromSettings();
+        DiagnosticCaptureService.Instance.RegisterOperatorSurface(OperatorPreviewSurface);
+        DiagnosticCaptureService.Instance.ApplyFromSettings();
         await ViewModel.LoadSavedFolderAsync();
         _ = ViewModel.CheckForUpdatesOnStartupAsync();
     }
@@ -143,6 +145,7 @@ public sealed partial class MainPage : Page
         UpdateOverlayPlayVisibility();
         UpdatePerfMonitorVisibility();
         PerfMonitorService.Instance.ApplyFromSettings();
+        DiagnosticCaptureService.Instance.ApplyFromSettings();
     }
 
     private void UpdateDemoWatermark() =>

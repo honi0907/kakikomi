@@ -152,6 +152,24 @@ public sealed partial class SettingsWindow : Window
 
         OpenPerfLogFolderBtn.Click += (_, _) => PerfMonitorService.OpenLogFolder();
 
+        DiagnosticCaptureCheck.Click += (_, _) =>
+        {
+            if (_loadingUi)
+                return;
+            AppSettings.SetDiagnosticCaptureEnabled(DiagnosticCaptureCheck.IsChecked == true);
+            DiagnosticCaptureService.Instance.ApplyFromSettings();
+        };
+
+        DiagnosticCaptureIntervalBox.ValueChanged += (_, _) =>
+        {
+            if (_loadingUi)
+                return;
+            AppSettings.SetDiagnosticCaptureIntervalMinutes((int)Math.Round(DiagnosticCaptureIntervalBox.Value));
+            DiagnosticCaptureService.Instance.ApplyFromSettings();
+        };
+
+        OpenDiagnosticCaptureFolderBtn.Click += (_, _) => DiagnosticCaptureService.OpenFolder();
+
         RemoteControlEnabledCheck.Click += (_, _) =>
         {
             if (_loadingUi)
@@ -230,6 +248,7 @@ public sealed partial class SettingsWindow : Window
         StyleActionButton(CloseColorEditorBtn);
         StyleActionButton(RemoteApplyBtn);
         StyleActionButton(OpenPerfLogFolderBtn);
+        StyleActionButton(OpenDiagnosticCaptureFolderBtn);
     }
 
     private void ApplyRemoteSettingsFromUi()
@@ -410,6 +429,8 @@ public sealed partial class SettingsWindow : Window
             OverlayPlayButtonCheck.IsChecked = AppSettings.OverlayPlayButton;
             PerfMonitorCheck.IsChecked = AppSettings.PerfMonitorEnabled;
             PerfLogCheck.IsChecked = AppSettings.PerfLogEnabled;
+            DiagnosticCaptureCheck.IsChecked = AppSettings.DiagnosticCaptureEnabled;
+            DiagnosticCaptureIntervalBox.Value = AppSettings.DiagnosticCaptureIntervalMinutes;
             RefreshRemotePanel();
             SaveFolderPathText.Text = SaveFolderService.EnsureExists();
             ConvertFolderPathText.Text = MovTranscodeService.EnsureCacheDirectory();

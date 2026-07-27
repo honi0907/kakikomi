@@ -344,6 +344,34 @@
                             MinHeight="36"
                             Content="ログフォルダを開く" />
                     </StackPanel>
+                    <TextBlock
+                        Margin="0,12,0,0"
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
+                        Text="操作プレビュー（1920×1080）とクリーン出力を PNG で自動保存します。10分ごとの定期保存、映像異常検知時、復旧の前後に保存します。保存先は %LocalAppData%\Kakikomi\diagnostics（7日で自動削除）。" />
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <CheckBox
+                            x:Name="DiagnosticCaptureCheck"
+                            Content="診断キャプチャを自動保存"
+                            Foreground="#FFE2E8F0"
+                            VerticalAlignment="Center" />
+                        <NumberBox
+                            x:Name="DiagnosticCaptureIntervalBox"
+                            Width="96"
+                            Minimum="1"
+                            Maximum="120"
+                            SpinButtonPlacementMode="Inline"
+                            SmallChange="1"
+                            LargeChange="5" />
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Foreground="#FFE2E8F0"
+                            Text="分ごと" />
+                        <Button
+                            x:Name="OpenDiagnosticCaptureFolderBtn"
+                            MinHeight="36"
+                            Content="キャプチャフォルダを開く" />
+                    </StackPanel>
                 </StackPanel>
 
                 <StackPanel x:Name="PanelExit" Spacing="16" Visibility="Collapsed">

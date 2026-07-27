@@ -106,11 +106,16 @@ public sealed class CompositionVideoHost : Grid
         lock (_drawLock)
         {
             _image.Source = null;
-            _imageSource = null;
+            DisposeImageSource_NoLock();
             _surfaceWidth = 0;
             _surfaceHeight = 0;
             _pendingTarget = null;
         }
+    }
+
+    private void DisposeImageSource_NoLock()
+    {
+        _imageSource = null;
     }
 
     private void OnFrameCopied(CanvasRenderTarget target, int width, int height)
@@ -214,6 +219,7 @@ public sealed class CompositionVideoHost : Grid
             var device = CanvasDevice.GetSharedDevice();
             if (device.IsDeviceLost())
                 device = new CanvasDevice();
+            DisposeImageSource_NoLock();
             _imageSource = new CanvasImageSource(device, width, height, 96);
             _image.Source = _imageSource;
         }
@@ -222,6 +228,7 @@ public sealed class CompositionVideoHost : Grid
             try
             {
                 var device = new CanvasDevice();
+                DisposeImageSource_NoLock();
                 _imageSource = new CanvasImageSource(device, width, height, 96);
                 _image.Source = _imageSource;
                 PerfMonitorService.Instance.LogEvent(

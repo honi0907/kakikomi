@@ -9,6 +9,7 @@
     <Grid Background="Black">
         <Viewbox Stretch="Uniform">
             <Grid
+                x:Name="CleanPreviewSurface"
                 Width="1920"
                 Height="1080"
                 Background="Black">

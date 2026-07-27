@@ -50,6 +50,14 @@ public static class AppSettings
     /// </summary>
     public static bool PerfLogEnabled { get; private set; }
 
+    /// <summary>
+    /// ON: 操作プレビューとクリーン出力を PNG 自動保存（定期・異常・復旧時）。既定 OFF。
+    /// </summary>
+    public static bool DiagnosticCaptureEnabled { get; private set; }
+
+    /// <summary>診断キャプチャの定期間隔（分）。既定 10。</summary>
+    public static int DiagnosticCaptureIntervalMinutes { get; private set; } = 10;
+
     /// <summary>LAN 遠隔操作（Web）を有効化。既定 OFF。</summary>
     public static bool RemoteControlEnabled { get; private set; }
 
@@ -107,6 +115,10 @@ public static class AppSettings
                 PerfMonitorEnabled = perfMon;
             if (dto.PerfLogEnabled is { } perfLog)
                 PerfLogEnabled = perfLog;
+            if (dto.DiagnosticCaptureEnabled is { } diagCap)
+                DiagnosticCaptureEnabled = diagCap;
+            if (dto.DiagnosticCaptureIntervalMinutes is { } diagMin)
+                DiagnosticCaptureIntervalMinutes = Math.Clamp(diagMin, 1, 120);
             if (dto.RemoteControlEnabled is { } remoteOn)
                 RemoteControlEnabled = remoteOn;
             if (dto.RemoteControlPort is { } remotePort)
@@ -202,6 +214,20 @@ public static class AppSettings
         Changed?.Invoke();
     }
 
+    public static void SetDiagnosticCaptureEnabled(bool enabled)
+    {
+        DiagnosticCaptureEnabled = enabled;
+        Persist();
+        Changed?.Invoke();
+    }
+
+    public static void SetDiagnosticCaptureIntervalMinutes(int minutes)
+    {
+        DiagnosticCaptureIntervalMinutes = Math.Clamp(minutes, 1, 120);
+        Persist();
+        Changed?.Invoke();
+    }
+
     public static void SetRemoteControlEnabled(bool enabled)
     {
         RemoteControlEnabled = enabled;
@@ -259,6 +285,8 @@ public static class AppSettings
                 OverlayPlayButton = OverlayPlayButton,
                 PerfMonitorEnabled = PerfMonitorEnabled,
                 PerfLogEnabled = PerfLogEnabled,
+                DiagnosticCaptureEnabled = DiagnosticCaptureEnabled,
+                DiagnosticCaptureIntervalMinutes = DiagnosticCaptureIntervalMinutes,
                 RemoteControlEnabled = RemoteControlEnabled,
                 RemoteControlPort = RemoteControlPort,
                 RemoteControlPin = RemoteControlPin,
@@ -311,6 +339,8 @@ public static class AppSettings
         public bool? OverlayPlayButton { get; set; }
         public bool? PerfMonitorEnabled { get; set; }
         public bool? PerfLogEnabled { get; set; }
+        public bool? DiagnosticCaptureEnabled { get; set; }
+        public int? DiagnosticCaptureIntervalMinutes { get; set; }
         public bool? RemoteControlEnabled { get; set; }
         public int? RemoteControlPort { get; set; }
         public string? RemoteControlPin { get; set; }

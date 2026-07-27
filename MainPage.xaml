@@ -265,7 +265,7 @@
                 Background="Black"
                 CornerRadius="8">
                 <Viewbox Stretch="Uniform">
-                    <Grid Width="1920" Height="1080" Background="Black">
+                    <Grid x:Name="OperatorPreviewSurface" Width="1920" Height="1080" Background="Black">
                         <controls:CompositionVideoHost x:Name="OperatorPlayerA" />
                         <controls:CompositionVideoHost x:Name="OperatorPlayerB" />
                         <controls:DesignInkCanvas x:Name="InkLayer" />

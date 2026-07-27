@@ -24,6 +24,8 @@ public sealed partial class CleanOutputWindow : Window
         UpdateCleanSlotVisibility(session.VisibleSlotIndex);
         InkLayer.Attach(session, inputEnabled: false);
         session.VisibleSlotChanged += OnVisibleSlotChanged;
+        DiagnosticCaptureService.Instance.RegisterCleanSurface(CleanPreviewSurface);
+        DiagnosticCaptureService.Instance.ApplyFromSettings();
     }
 
     private void OnVisibleSlotChanged(int visibleSlotIndex)
@@ -56,9 +58,16 @@ public sealed partial class CleanOutputWindow : Window
     {
         var dq = DispatcherQueue;
         if (dq.HasThreadAccess)
+        {
             UpdateDemoWatermark();
+            DiagnosticCaptureService.Instance.ApplyFromSettings();
+        }
         else
-            dq.TryEnqueue(UpdateDemoWatermark);
+            dq.TryEnqueue(() =>
+            {
+                UpdateDemoWatermark();
+                DiagnosticCaptureService.Instance.ApplyFromSettings();
+            });
     }
 
     private void UpdateDemoWatermark() =>
