@@ -28,6 +28,7 @@ internal sealed class MediaPlayerPair : IDisposable
     {
         try
         {
+            VideoFrameRelay.Clear(Player);
             Player.Source = null;
         }
         catch

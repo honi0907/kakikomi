@@ -80,23 +80,33 @@ public sealed partial class MainPage : Page
     {
         var dq = App.DispatcherQueue;
         if (dq.HasThreadAccess)
-            ApplyVisibleSlot(visibleSlotIndex);
+            _ = ApplyVisibleSlotAsync(visibleSlotIndex);
         else
-            dq.TryEnqueue(() => ApplyVisibleSlot(visibleSlotIndex));
+            dq.TryEnqueue(() => _ = ApplyVisibleSlotAsync(visibleSlotIndex));
     }
 
-    private void ApplyVisibleSlot(int visibleSlotIndex)
+    private async Task ApplyVisibleSlotAsync(int visibleSlotIndex)
     {
         var session = ViewModel.Session;
         OperatorPlayerA.Attach(session.GetOperatorPlayerForSlot(0));
         OperatorPlayerB.Attach(session.GetOperatorPlayerForSlot(1));
+        await session.PrimeVisibleSlotFrameAsync(visibleSlotIndex);
         UpdateOperatorSlotVisibility(visibleSlotIndex);
     }
 
     private void UpdateOperatorSlotVisibility(int visibleSlotIndex)
     {
-        OperatorPlayerA.Visibility = visibleSlotIndex == 0 ? Visibility.Visible : Visibility.Collapsed;
-        OperatorPlayerB.Visibility = visibleSlotIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
+        // 新スロットを先に Visible にする（Z 順で上）。旧映像の黒抜けを防ぐ。
+        if (visibleSlotIndex == 0)
+        {
+            OperatorPlayerA.Visibility = Visibility.Visible;
+            OperatorPlayerB.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            OperatorPlayerB.Visibility = Visibility.Visible;
+            OperatorPlayerA.Visibility = Visibility.Collapsed;
+        }
     }
 
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

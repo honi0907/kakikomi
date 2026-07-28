@@ -32,12 +32,12 @@ public sealed partial class CleanOutputWindow : Window
     {
         var dq = DispatcherQueue;
         if (dq.HasThreadAccess)
-            ApplyVisibleSlot(visibleSlotIndex);
+            _ = ApplyVisibleSlotAsync(visibleSlotIndex);
         else
-            dq.TryEnqueue(() => ApplyVisibleSlot(visibleSlotIndex));
+            dq.TryEnqueue(() => _ = ApplyVisibleSlotAsync(visibleSlotIndex));
     }
 
-    private void ApplyVisibleSlot(int visibleSlotIndex)
+    private async Task ApplyVisibleSlotAsync(int visibleSlotIndex)
     {
         var session = App.Engine;
         if (session is null)
@@ -45,13 +45,22 @@ public sealed partial class CleanOutputWindow : Window
 
         PlayerElementA.Attach(session.GetCleanPlayerForSlot(0));
         PlayerElementB.Attach(session.GetCleanPlayerForSlot(1));
+        await session.PrimeVisibleSlotFrameAsync(visibleSlotIndex);
         UpdateCleanSlotVisibility(visibleSlotIndex);
     }
 
     private void UpdateCleanSlotVisibility(int visibleSlotIndex)
     {
-        PlayerElementA.Visibility = visibleSlotIndex == 0 ? Visibility.Visible : Visibility.Collapsed;
-        PlayerElementB.Visibility = visibleSlotIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
+        if (visibleSlotIndex == 0)
+        {
+            PlayerElementA.Visibility = Visibility.Visible;
+            PlayerElementB.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            PlayerElementB.Visibility = Visibility.Visible;
+            PlayerElementA.Visibility = Visibility.Collapsed;
+        }
     }
 
     private void OnAppSettingsChanged()

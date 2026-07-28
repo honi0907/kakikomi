@@ -43,6 +43,7 @@ public sealed class CompositionVideoHost : Grid
         Children.Add(_image);
 
         CompositionVideoHostRegistry.Register(this);
+        RegisterPropertyChangedCallback(VisibilityProperty, OnVisibilityChanged);
         Unloaded += (_, _) =>
         {
             CompositionVideoHostRegistry.Unregister(this);
@@ -56,6 +57,8 @@ public sealed class CompositionVideoHost : Grid
             return;
 
         DetachSubscription();
+        ClearPendingFrame_NoLock();
+        ResetImageSource();
         _player = player;
 
         if (_player is null)
@@ -64,6 +67,26 @@ public sealed class CompositionVideoHost : Grid
         _player.IsVideoFrameServerEnabled = true;
         _subscription = MediaFramePump.Subscribe(_player, OnFrameCopied);
         _drawFailures = 0;
+        TryAdoptRelayFrame();
+    }
+
+    private void TryAdoptRelayFrame()
+    {
+        if (_player is null)
+            return;
+
+        if (!VideoFrameRelay.TryGetFrame(_player, out var target, out var width, out var height, out _))
+            return;
+
+        if (target is null || width <= 0 || height <= 0)
+            return;
+
+        lock (_drawLock)
+        {
+            _pendingTarget = target;
+            _pendingWidth = width;
+            _pendingHeight = height;
+        }
     }
 
     /// <summary>購読を強制張り直し（映像経路復帰用）。</summary>
@@ -101,6 +124,20 @@ public sealed class CompositionVideoHost : Grid
         _subscription = null;
     }
 
+    private void OnVisibilityChanged(DependencyObject sender, DependencyProperty dp)
+    {
+        if (Visibility == Visibility.Visible)
+        {
+            // 非表示中に溜まった古い ImageSource を捨て、最新の pending を描く。
+            ResetImageSource();
+            DrawPending();
+            return;
+        }
+
+        // 非表示にしたら前ネタの静止画を残さない。
+        ResetImageSource();
+    }
+
     private void ResetImageSource()
     {
         lock (_drawLock)
@@ -109,8 +146,14 @@ public sealed class CompositionVideoHost : Grid
             DisposeImageSource_NoLock();
             _surfaceWidth = 0;
             _surfaceHeight = 0;
-            _pendingTarget = null;
         }
+    }
+
+    private void ClearPendingFrame_NoLock()
+    {
+        _pendingTarget = null;
+        _pendingWidth = 0;
+        _pendingHeight = 0;
     }
 
     private void DisposeImageSource_NoLock()

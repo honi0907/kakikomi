@@ -41,6 +41,7 @@ public sealed class EngineSession : IDisposable
 
     private int _visibleSlotIndex;
     private int _openGeneration;
+    private bool _primeToHeadOnShow;
     private CancellationTokenSource? _warmCts;
 
     public IReadOnlyList<InkStrokeData> Strokes => _strokes;
@@ -335,9 +336,6 @@ public sealed class EngineSession : IDisposable
                     return;
                 }
 
-                if (resetToHead)
-                    ResetPairToStart(warmed);
-
                 ReleaseDisplayPair(standbySlot);
                 _displayPairs[standbySlot] = warmed;
                 WirePairEvents(warmed);
@@ -356,8 +354,6 @@ public sealed class EngineSession : IDisposable
             IsPlaying = false;
             CurrentPath = item.Path;
             _visibleSlotIndex = standbySlot;
-            if (resetToHead)
-                ResetPairToStart(_displayPairs[_visibleSlotIndex]);
 
             ApplyMutePolicy();
 
@@ -375,6 +371,7 @@ public sealed class EngineSession : IDisposable
             _displayPairs[oldVisibleSlot] = new MediaPlayerPair();
             WirePairEvents(_displayPairs[oldVisibleSlot]);
 
+            _primeToHeadOnShow = resetToHead;
             // 先にスロット切替を通知してからコマ更新する。
             // （遠隔プレビュー等が新プレイヤーを購読してから VideoFrameAvailable を受け取る）
             VisibleSlotChanged?.Invoke(_visibleSlotIndex);
@@ -416,6 +413,54 @@ public sealed class EngineSession : IDisposable
         RequestPreviewKeyframe(withRetries: true);
     }
 
+    /// <summary>
+    /// 表示スロットの MediaPlayer をホストへ Attach したあと、Visible にする前に呼ぶ。
+    /// 先頭付近は FrameAvailable が来ないことがあるため PrimeFirstFrameAsync で確実にコマを出す。
+    /// </summary>
+    public async Task PrimeVisibleSlotFrameAsync(
+        int slotIndex,
+        CancellationToken cancellationToken = default)
+    {
+        if (slotIndex is < 0 or > 1)
+            return;
+
+        var pair = _displayPairs[slotIndex];
+        if (string.IsNullOrEmpty(pair.Path))
+            return;
+
+        var player = pair.Player;
+        try
+        {
+            player.Pause();
+            player.IsMuted = true;
+            player.Volume = 0;
+
+            var forceHead = _primeToHeadOnShow;
+            _primeToHeadOnShow = false;
+            if (!AppSettings.ResumePlayback || forceHead)
+                player.PlaybackSession.Position = TimeSpan.Zero;
+
+            var position = player.PlaybackSession.Position;
+            if (position <= TimeSpan.FromMilliseconds(16))
+            {
+                await PrimeFirstFrameAsync(player, cancellationToken).ConfigureAwait(true);
+                ForcePausedFrameRefresh(player, ClockRate);
+            }
+            else
+            {
+                ForcePausedFrameRefresh(player, ClockRate);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+
     /// <summary>ポーズ中プレビュー用に VideoFrameAvailable を起こす。</summary>
     public void RequestPausedFrameRefresh()
     {
@@ -423,7 +468,33 @@ public sealed class EngineSession : IDisposable
             return;
         if (IsPlaying)
             return;
-        ForcePausedFrameRefresh(OperatorPlayer, ClockRate);
+
+        var player = OperatorPlayer;
+        var session = player.PlaybackSession;
+        if (session.Position <= TimeSpan.FromMilliseconds(16))
+        {
+            _ = PrimeAtHeadAndRefreshAsync(player);
+            return;
+        }
+
+        ForcePausedFrameRefresh(player, ClockRate);
+    }
+
+    private async Task PrimeAtHeadAndRefreshAsync(MediaPlayer player)
+    {
+        try
+        {
+            await PrimeFirstFrameAsync(player, CancellationToken.None).ConfigureAwait(true);
+            if (_disposed || IsPlaying)
+                return;
+            if (!ReferenceEquals(player, OperatorPlayer))
+                return;
+            ForcePausedFrameRefresh(player, ClockRate);
+        }
+        catch
+        {
+            // ignore
+        }
     }
 
     /// <summary>再生中に Frame Server を再起動する（一時停止しない）。</summary>
@@ -876,7 +947,6 @@ public sealed class EngineSession : IDisposable
             pair.Player.IsMuted = true;
             pair.Player.Volume = 0;
             var session = pair.Player.PlaybackSession;
-            // すでに先頭だと FrameAvailable が来ないことがあるので一度ずらす
             try
             {
                 if (session.Position <= TimeSpan.FromMilliseconds(16))
