@@ -134,6 +134,16 @@ public sealed partial class SettingsWindow : Window
             AppSettings.SetOverlayPlayButton(OverlayPlayButtonCheck.IsChecked == true);
         };
 
+        NetaLoopCheck.Click += (_, _) =>
+        {
+            if (_loadingUi)
+                return;
+            if (NetaLoopCheck.IsChecked == true)
+                RemoteNetaLoopService.Instance.Start();
+            else
+                RemoteNetaLoopService.Instance.Stop();
+        };
+
         PerfMonitorCheck.Click += (_, _) =>
         {
             if (_loadingUi)
@@ -427,6 +437,7 @@ public sealed partial class SettingsWindow : Window
             FullSizeNextLaunchCheck.IsChecked = AppSettings.LaunchControlPanelFullSize;
             ResumePlaybackCheck.IsChecked = AppSettings.ResumePlayback;
             OverlayPlayButtonCheck.IsChecked = AppSettings.OverlayPlayButton;
+            NetaLoopCheck.IsChecked = RemoteNetaLoopService.Instance.IsRunning;
             PerfMonitorCheck.IsChecked = AppSettings.PerfMonitorEnabled;
             PerfLogCheck.IsChecked = AppSettings.PerfLogEnabled;
             DiagnosticCaptureCheck.IsChecked = AppSettings.DiagnosticCaptureEnabled;
@@ -602,6 +613,8 @@ public sealed partial class SettingsWindow : Window
             SaveFolderPathText.Text = SaveFolderService.EnsureExists();
         if (tag == "Convert")
             ConvertFolderPathText.Text = MovTranscodeService.EnsureCacheDirectory();
+        if (tag == "Playback")
+            NetaLoopCheck.IsChecked = RemoteNetaLoopService.Instance.IsRunning;
         if (tag == "NetaList")
             BindNetaManageList();
         if (tag == "Demo")

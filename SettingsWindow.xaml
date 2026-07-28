@@ -323,6 +323,15 @@
                         Margin="0,12,0,0"
                         Foreground="#FF94A3B8"
                         TextWrapping="Wrap"
+                        Text="ネタ一覧を順番に再生します。1本終わると次へ進み、最後の次は先頭に戻ります。静止画は約5秒表示します。リモートのループ操作と同じ動作です。" />
+                    <CheckBox
+                        x:Name="NetaLoopCheck"
+                        Content="ネタ一覧をループ再生"
+                        Foreground="#FFE2E8F0" />
+                    <TextBlock
+                        Margin="0,12,0,0"
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
                         Text="操作パネル左下に、このアプリの CPU・メモリ使用量と、遠隔プレビュー送信の fps / 転送量を表示します。調査用です（既定 OFF）。" />
                     <CheckBox
                         x:Name="PerfMonitorCheck"
