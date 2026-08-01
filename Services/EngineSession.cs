@@ -1058,7 +1058,7 @@ public sealed class EngineSession : IDisposable
             player.IsMuted = true;
             player.Volume = 0;
             player.Play();
-            await Task.Delay(32, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(32, cancellationToken).ConfigureAwait(true);
             player.Pause();
             player.PlaybackSession.Position = TimeSpan.Zero;
         }
@@ -1101,8 +1101,9 @@ public sealed class EngineSession : IDisposable
 
     private void ApplyMutePolicy()
     {
-        // 単一プレイヤー: 等速再生中だけ音声 ON（変速・スクラブ中はミュート）。
-        var rateMute = Math.Abs(ClockRate - 1.0) > 0.001;
+        // 等速のみ音声 ON が既定。設定 ON なら変速中も音声（ピッチは速度に連動）。スクラブ中は常にミュート。
+        var rateMute = !AppSettings.VariableSpeedAudioEnabled
+            && Math.Abs(ClockRate - 1.0) > 0.001;
         var mute = rateMute || !IsPlaying || _scrubPreviewActive;
         foreach (var pair in _displayPairs)
         {
@@ -1110,6 +1111,9 @@ public sealed class EngineSession : IDisposable
             pair.Player.Volume = mute ? 0 : 1.0;
         }
     }
+
+    /// <summary>設定変更後に音声ポリシーを再適用する。</summary>
+    public void RefreshMutePolicy() => ApplyMutePolicy();
 
     private static async Task WaitForOpenedAsync(
         MediaPlayer player,

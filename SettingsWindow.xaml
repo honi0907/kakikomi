@@ -8,40 +8,19 @@
 
     <Grid Background="#FF0F172A" RequestedTheme="Dark">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="220" />
+            <ColumnDefinition Width="248" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
         <Border
             Grid.Column="0"
-            Padding="12"
+            Padding="8,12"
             Background="#FF020617"
             BorderBrush="#FF334155"
             BorderThickness="0,0,1,0">
-            <ListView
-                x:Name="NavList"
-                SelectionMode="Single">
-                <ListView.ItemContainerStyle>
-                    <Style TargetType="ListViewItem">
-                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                        <Setter Property="Padding" Value="12,10" />
-                        <Setter Property="Margin" Value="0,0,0,4" />
-                        <Setter Property="MinHeight" Value="0" />
-                    </Style>
-                </ListView.ItemContainerStyle>
-                <ListViewItem Tag="Exit" Content="ソフト終了" Margin="0,0,0,20" />
-                <ListViewItem Tag="Version" Content="バージョン / 更新" />
-                <ListViewItem Tag="Demo" Content="DEMOモード" />
-                <ListViewItem Tag="Clean" Content="クリーン出力" />
-                <ListViewItem Tag="Save" Content="保存" />
-                <ListViewItem Tag="Convert" Content=".mov 変換" />
-                <ListViewItem Tag="NetaList" Content="ネタ一覧" />
-                <ListViewItem Tag="Remote" Content="LAN 遠隔操作" />
-                <ListViewItem Tag="Playback" Content="再生" />
-                <ListViewItem Tag="Palette" Content="パレットの色編集" />
-                <ListViewItem Tag="PenSize" Content="ペンサイズ" />
-                <ListViewItem Tag="FullSize" Content="コンパネ起動サイズ" />
-            </ListView>
+            <TreeView
+                x:Name="NavTree"
+                ItemInvoked="OnNavTreeItemInvoked" />
         </Border>
 
         <ScrollViewer
@@ -215,6 +194,39 @@
                         TextWrapping="Wrap"
                         Text="操作画面と同じ一覧です。チェックして複数消去、または一斉消去できます。PC上の動画ファイルは削除されません。" />
                     <TextBlock
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
+                        Text="操作画面のサムネイル表示サイズです。設定は次回起動後も保持されます。" />
+                    <StackPanel Spacing="8">
+                        <TextBlock Foreground="#FFE2E8F0" Text="サムネイルサイズ" />
+                        <StackPanel Spacing="6">
+                            <RadioButton
+                                x:Name="NetaThumbScale1Radio"
+                                Content="標準"
+                                Foreground="#FFE2E8F0"
+                                GroupName="NetaThumbScale" />
+                            <RadioButton
+                                x:Name="NetaThumbScale12Radio"
+                                Content="1.2倍"
+                                Foreground="#FFE2E8F0"
+                                GroupName="NetaThumbScale" />
+                            <RadioButton
+                                x:Name="NetaThumbScale15Radio"
+                                Content="1.5倍"
+                                Foreground="#FFE2E8F0"
+                                GroupName="NetaThumbScale" />
+                        </StackPanel>
+                    </StackPanel>
+                    <TextBlock
+                        Margin="0,12,0,0"
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
+                        Text="ネタを切り替えるとき、操作画面とクリーン出力で短いクロスフェードをかけます。OFF（既定）では即時切替です。" />
+                    <CheckBox
+                        x:Name="NetaSwitchCrossfadeCheck"
+                        Content="ネタ切替時に短いフェード"
+                        Foreground="#FFE2E8F0" />
+                    <TextBlock
                         x:Name="NetaListCountText"
                         Foreground="#FFE2E8F0"
                         Text="0 本" />
@@ -305,10 +317,28 @@
                     <TextBlock
                         Foreground="#FF94A3B8"
                         TextWrapping="Wrap"
+                        Text="操作バーの位置を切り替えます。上配置ではボタン→シークバー→映像の順になります。既定は映像の下です。" />
+                    <CheckBox
+                        x:Name="ControlPanelChromeAtTopCheck"
+                        Content="操作バーを映像の上に配置"
+                        Foreground="#FFE2E8F0" />
+                    <TextBlock
+                        Margin="0,12,0,0"
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
                         Text="レジューム再生を ON にすると、別ネタを見て戻ったときに、前回止めた位置から続き再生します。OFF（既定）では戻るたびに先頭から始まります。" />
                     <CheckBox
                         x:Name="ResumePlaybackCheck"
                         Content="レジューム再生"
+                        Foreground="#FFE2E8F0" />
+                    <TextBlock
+                        Margin="0,12,0,0"
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
+                        Text="0.25x / 0.5x / 2x 再生中も音声を出します。ピッチは速度に連動して変わります。OFF（既定）では等速のみ音声 ON です。" />
+                    <CheckBox
+                        x:Name="VariableSpeedAudioCheck"
+                        Content="変速再生でも音声を出す"
                         Foreground="#FFE2E8F0" />
                     <TextBlock
                         Margin="0,12,0,0"
@@ -328,8 +358,11 @@
                         x:Name="NetaLoopCheck"
                         Content="ネタ一覧をループ再生"
                         Foreground="#FFE2E8F0" />
+                </StackPanel>
+
+                <StackPanel x:Name="PanelLoadLog" Spacing="16" Visibility="Collapsed">
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="#FFF8FAFC" Text="負荷・ログ" />
                     <TextBlock
-                        Margin="0,12,0,0"
                         Foreground="#FF94A3B8"
                         TextWrapping="Wrap"
                         Text="操作パネル左下に、このアプリの CPU・メモリ使用量と、遠隔プレビュー送信の fps / 転送量を表示します。調査用です（既定 OFF）。" />
@@ -576,15 +609,35 @@
                     <TextBlock
                         Foreground="#FF94A3B8"
                         TextWrapping="Wrap"
-                        Text="描画ペンと消しゴムの太さを変更します。操作画面にも現在の太さが表示されます。" />
+                        Text="コンパネで切り替えるペン太さを3つ登録します。消しゴム太さは別設定です。" />
                     <NumberBox
-                        x:Name="PenSizeBox"
-                        Header="ペン太さ"
+                        x:Name="PenPreset1Box"
+                        Header="ペン太さ 1"
                         Minimum="1"
                         Maximum="40"
                         SmallChange="1"
                         LargeChange="2"
                         SpinButtonPlacementMode="Inline" />
+                    <NumberBox
+                        x:Name="PenPreset2Box"
+                        Header="ペン太さ 2"
+                        Minimum="1"
+                        Maximum="40"
+                        SmallChange="1"
+                        LargeChange="2"
+                        SpinButtonPlacementMode="Inline" />
+                    <NumberBox
+                        x:Name="PenPreset3Box"
+                        Header="ペン太さ 3"
+                        Minimum="1"
+                        Maximum="40"
+                        SmallChange="1"
+                        LargeChange="2"
+                        SpinButtonPlacementMode="Inline" />
+                    <Button
+                        x:Name="ResetPenPresetsBtn"
+                        MinWidth="180"
+                        Content="ペン太さを 8 / 16 / 24 に戻す" />
                     <NumberBox
                         x:Name="EraserSizeBox"
                         Header="消しゴム太さ"
@@ -600,10 +653,10 @@
                     <TextBlock
                         Foreground="#FF94A3B8"
                         TextWrapping="Wrap"
-                        Text="次回起動時の最大化と、いますぐフルスクリーンにする操作を分けています。" />
+                        Text="次回起動時の完全フルスクリーンと、いますぐフルスクリーンにする操作を分けています。" />
                     <CheckBox
                         x:Name="FullSizeNextLaunchCheck"
-                        Content="次回起動時にフルサイズ（最大化）で開く"
+                        Content="次回起動時に完全フルスクリーンで開く"
                         Foreground="#FFE2E8F0" />
                     <Button
                         x:Name="FullScreenNowBtn"

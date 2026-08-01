@@ -19,9 +19,7 @@
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- 更新ありバナー -->
@@ -64,7 +62,6 @@
 
         <Border
             Grid.Row="1"
-            Grid.RowSpan="3"
             Grid.Column="0"
             Padding="10"
             Background="{StaticResource OpBarBg}"
@@ -130,12 +127,12 @@
                                 <Grid>
                                     <Grid ColumnSpacing="8">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="84" />
+                                            <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
                                         </Grid.ColumnDefinitions>
                                         <Border
-                                            Width="84"
-                                            Height="47"
+                                            Width="{Binding ViewModel.NetaThumbnailWidth, ElementName=RootPage}"
+                                            Height="{Binding ViewModel.NetaThumbnailHeight, ElementName=RootPage}"
                                             Background="#FF020617"
                                             BorderBrush="#FF334155"
                                             BorderThickness="1">
@@ -165,19 +162,21 @@
                                                             Text="{x:Bind ConvertStatusLabel, Mode=OneWay}" />
                                                     </Border>
                                                 </Border>
-                                                <Border
-                                                    Margin="2"
-                                                    Padding="3,1"
-                                                    HorizontalAlignment="Left"
-                                                    VerticalAlignment="Bottom"
-                                                    Background="#CC020617"
-                                                    CornerRadius="8"
-                                                    Visibility="{x:Bind FrameRateVisibility, Mode=OneWay}">
-                                                    <TextBlock
-                                                        FontSize="9"
-                                                        FontWeight="SemiBold"
-                                                        Foreground="#FFE2E8F0"
-                                                        Text="{x:Bind FrameRateLabel, Mode=OneWay}" />
+                                                <Border Visibility="{Binding ViewModel.EditModeVisibility, ElementName=RootPage}">
+                                                    <Border
+                                                        Margin="2"
+                                                        Padding="3,1"
+                                                        HorizontalAlignment="Left"
+                                                        VerticalAlignment="Bottom"
+                                                        Background="#CC020617"
+                                                        CornerRadius="8"
+                                                        Visibility="{x:Bind FrameRateVisibility, Mode=OneWay}">
+                                                        <TextBlock
+                                                            FontSize="9"
+                                                            FontWeight="SemiBold"
+                                                            Foreground="#FFE2E8F0"
+                                                            Text="{x:Bind FrameRateLabel, Mode=OneWay}" />
+                                                    </Border>
                                                 </Border>
                                                 <Button
                                                     Width="18"
@@ -252,16 +251,19 @@
 
         <Grid
             Grid.Row="1"
-            Grid.RowSpan="2"
             Grid.Column="1"
-            RowSpacing="0">
+            RowSpacing="8">
             <Grid.RowDefinitions>
+                <RowDefinition x:Name="OperatorChromeTopRow" Height="Auto" />
                 <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
+                <RowDefinition x:Name="OperatorChromeBottomRow" Height="Auto" />
             </Grid.RowDefinitions>
 
+            <StackPanel x:Name="OperatorChromeTopDock" Grid.Row="0" Spacing="8" />
+
             <Border
-                Grid.Row="0"
+                x:Name="OperatorVideoHost"
+                Grid.Row="1"
                 Background="Black"
                 CornerRadius="8">
                 <Viewbox Stretch="Uniform">
@@ -273,228 +275,245 @@
                 </Viewbox>
             </Border>
 
-            <Border
-                Grid.Row="1"
-                Padding="8,8"
-                Background="#FF020617"
-                BorderBrush="{StaticResource OpPanelBorderBrush}"
-                BorderThickness="1,1,1,0"
-                CornerRadius="8">
-                <Grid ColumnSpacing="12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock
-                        MinWidth="120"
-                        VerticalAlignment="Center"
-                        FontFamily="Consolas"
-                        FontSize="15"
-                        Foreground="{StaticResource OpTextBrush}"
-                        Text="{x:Bind ViewModel.TimelineText, Mode=OneWay}" />
-                    <controls:TimelineSeekBar
-                        x:Name="TimelineSeek"
-                        Grid.Column="1"
-                        VerticalAlignment="Center"
-                        IsEnabled="{x:Bind ViewModel.HasTimeline, Mode=OneWay}"
-                        SeekStarted="OnTimelineSeekStarted"
-                        SeekPreview="OnTimelineSeekPreview"
-                        SeekCompleted="OnTimelineSeekCompleted" />
-                </Grid>
-            </Border>
-        </Grid>
+            <StackPanel x:Name="OperatorChromeBottomDock" Grid.Row="2" Spacing="8">
+                <Border
+                    x:Name="OperatorSeekBarHost"
+                    Padding="8,8"
+                    Background="#FF020617"
+                    BorderBrush="{StaticResource OpPanelBorderBrush}"
+                    BorderThickness="1,1,1,0"
+                    CornerRadius="8">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            MinWidth="120"
+                            VerticalAlignment="Center"
+                            FontFamily="Consolas"
+                            FontSize="15"
+                            Foreground="{StaticResource OpTextBrush}"
+                            Text="{x:Bind ViewModel.TimelineText, Mode=OneWay}" />
+                        <controls:TimelineSeekBar
+                            x:Name="TimelineSeek"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            IsEnabled="{x:Bind ViewModel.HasTimeline, Mode=OneWay}"
+                            SeekStarted="OnTimelineSeekStarted"
+                            SeekPreview="OnTimelineSeekPreview"
+                            SeekCompleted="OnTimelineSeekCompleted" />
+                    </Grid>
+                </Border>
 
-        <Border
-            Grid.Row="3"
-            Grid.Column="1"
-            Padding="10"
-            Background="{StaticResource OpBarBg}"
-            BorderBrush="{StaticResource OpPanelBorderBrush}"
-            BorderThickness="1"
-            CornerRadius="8">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <ScrollViewer
-                    Grid.Column="0"
-                    HorizontalScrollBarVisibility="Auto"
-                    HorizontalScrollMode="Enabled"
-                    VerticalScrollBarVisibility="Disabled"
-                    VerticalScrollMode="Disabled">
-                    <StackPanel Orientation="Horizontal" Spacing="12">
-                    <Button
-                        x:Name="PlayToggle"
-                        Style="{StaticResource OpButtonStyle}"
-                        MinWidth="120"
-                        Command="{x:Bind ViewModel.PlayPauseCommand}"
-                        Content="再生/停止" />
-
-                    <Button
-                        x:Name="SkipBackBtn"
-                        Style="{StaticResource OpButtonStyle}"
-                        Command="{x:Bind ViewModel.SkipBackCommand}"
-                        Content="-5秒" />
-                    <Button
-                        x:Name="SkipForwardBtn"
-                        Style="{StaticResource OpButtonStyle}"
-                        Command="{x:Bind ViewModel.SkipForwardCommand}"
-                        Content="+5秒" />
-
-                    <Border Width="3" Margin="12,8" Background="#FF475569" />
-
-                    <ToggleButton
-                        x:Name="RateNormalBtn"
-                        Style="{StaticResource OpToggleStyle}"
-                        Command="{x:Bind ViewModel.RateNormalCommand}"
-                        Content="等速"
-                        IsChecked="{x:Bind ViewModel.IsRateNormal, Mode=OneWay}" />
-                    <ToggleButton
-                        x:Name="RateHalfBtn"
-                        Style="{StaticResource OpToggleStyle}"
-                        Command="{x:Bind ViewModel.RateHalfCommand}"
-                        Content="0.5x"
-                        IsChecked="{x:Bind ViewModel.IsRateHalf, Mode=OneWay}" />
-                    <ToggleButton
-                        x:Name="RateQuarterBtn"
-                        Style="{StaticResource OpToggleStyle}"
-                        Command="{x:Bind ViewModel.RateQuarterCommand}"
-                        Content="0.25x"
-                        IsChecked="{x:Bind ViewModel.IsRateQuarter, Mode=OneWay}" />
-                    <ToggleButton
-                        x:Name="RateDoubleBtn"
-                        Style="{StaticResource OpToggleStyle}"
-                        Command="{x:Bind ViewModel.RateDoubleCommand}"
-                        Content="2x"
-                        IsChecked="{x:Bind ViewModel.IsRateDouble, Mode=OneWay}" />
-
-                    <Border Width="3" Margin="12,8" Background="#FF475569" />
-
-                    <ToggleButton
-                        x:Name="PenRedBtn"
-                        Style="{StaticResource OpPenSwatchToggleStyle}"
-                        Command="{x:Bind ViewModel.SelectPenRedCommand}"
-                        IsChecked="{x:Bind ViewModel.IsPenRed, Mode=OneWay}"
-                        ToolTipService.ToolTip="赤ペン">
-                        <Ellipse x:Name="PenRedSwatch" Width="26" Height="26" Fill="#FFEF4444" IsHitTestVisible="False" />
-                    </ToggleButton>
-                    <ToggleButton
-                        x:Name="PenGreenBtn"
-                        Style="{StaticResource OpPenSwatchToggleStyle}"
-                        Command="{x:Bind ViewModel.SelectPenGreenCommand}"
-                        IsChecked="{x:Bind ViewModel.IsPenGreen, Mode=OneWay}"
-                        ToolTipService.ToolTip="緑ペン">
-                        <Ellipse x:Name="PenGreenSwatch" Width="26" Height="26" Fill="#FF22C55E" IsHitTestVisible="False" />
-                    </ToggleButton>
-                    <ToggleButton
-                        x:Name="PenBlueBtn"
-                        Style="{StaticResource OpPenSwatchToggleStyle}"
-                        Command="{x:Bind ViewModel.SelectPenBlueCommand}"
-                        IsChecked="{x:Bind ViewModel.IsPenBlue, Mode=OneWay}"
-                        ToolTipService.ToolTip="青ペン">
-                        <Ellipse x:Name="PenBlueSwatch" Width="26" Height="26" Fill="#FF3B82F6" IsHitTestVisible="False" />
-                    </ToggleButton>
-                    <ToggleButton
-                        x:Name="PenEraserBtn"
-                        Style="{StaticResource OpToggleStyle}"
-                        MinWidth="48"
-                        Padding="0"
-                        Command="{x:Bind ViewModel.SelectPenEraserCommand}"
-                        IsChecked="{x:Bind ViewModel.IsPenEraser, Mode=OneWay}"
-                        ToolTipService.ToolTip="消しゴム">
-                        <!-- 添付イメージと同じ：青スリーブ＋白先端のブロック消しゴム -->
-                        <Viewbox Width="30" Height="30" IsHitTestVisible="False">
-                            <Grid Width="24" Height="24">
-                                <Border
-                                    Width="18"
-                                    Height="10"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    BorderBrush="#FF42A5F5"
-                                    BorderThickness="2.2"
-                                    CornerRadius="2.2"
-                                    RenderTransformOrigin="0.5,0.5">
-                                    <Border.RenderTransform>
-                                        <RotateTransform Angle="-45" />
-                                    </Border.RenderTransform>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="0.32*" />
-                                            <ColumnDefinition Width="0.68*" />
-                                        </Grid.ColumnDefinitions>
-                                        <Rectangle Grid.Column="0" Fill="#FFFFFFFF" />
-                                        <Rectangle Grid.Column="1" Fill="#FF42A5F5" />
-                                    </Grid>
-                                </Border>
-                            </Grid>
-                        </Viewbox>
-                    </ToggleButton>
-                    <Border
-                        Margin="4,0,0,0"
-                        Padding="4"
-                        VerticalAlignment="Center"
-                        Background="{StaticResource OpControlFillBrush}"
-                        CornerRadius="8"
-                        ToolTipService.ToolTip="ペン／消しゴムの太さ（現在のツール）">
-                        <StackPanel Orientation="Horizontal" Spacing="4">
+                <Border
+                    x:Name="OperatorButtonBarHost"
+                    Padding="10"
+                    Background="{StaticResource OpBarBg}"
+                    BorderBrush="{StaticResource OpPanelBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ScrollViewer
+                            Grid.Column="0"
+                            HorizontalScrollBarVisibility="Auto"
+                            HorizontalScrollMode="Enabled"
+                            VerticalScrollBarVisibility="Disabled"
+                            VerticalScrollMode="Disabled">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
                             <Button
-                                x:Name="PenThicknessMinusBtn"
-                                Style="{StaticResource OpButtonCompactStyle}"
-                                Content="−"
-                                Command="{x:Bind ViewModel.DecreasePenThicknessCommand}" />
-                            <TextBlock
+                                x:Name="PlayToggle"
+                                Style="{StaticResource OpButtonStyle}"
+                                MinWidth="120"
+                                Command="{x:Bind ViewModel.PlayPauseCommand}"
+                                Content="再生/停止" />
+
+                            <Button
+                                x:Name="SkipBackBtn"
+                                Style="{StaticResource OpButtonStyle}"
+                                Command="{x:Bind ViewModel.SkipBackCommand}"
+                                Content="-5秒" />
+                            <Button
+                                x:Name="SkipForwardBtn"
+                                Style="{StaticResource OpButtonStyle}"
+                                Command="{x:Bind ViewModel.SkipForwardCommand}"
+                                Content="+5秒" />
+
+                            <Border Width="3" Margin="12,8" Background="#FF475569" />
+
+                            <ToggleButton
+                                x:Name="RateNormalBtn"
+                                Style="{StaticResource OpToggleStyle}"
+                                Command="{x:Bind ViewModel.RateNormalCommand}"
+                                Content="等速"
+                                IsChecked="{x:Bind ViewModel.IsRateNormal, Mode=OneWay}" />
+                            <ToggleButton
+                                x:Name="RateHalfBtn"
+                                Style="{StaticResource OpToggleStyle}"
+                                Command="{x:Bind ViewModel.RateHalfCommand}"
+                                Content="0.5x"
+                                IsChecked="{x:Bind ViewModel.IsRateHalf, Mode=OneWay}" />
+                            <ToggleButton
+                                x:Name="RateQuarterBtn"
+                                Style="{StaticResource OpToggleStyle}"
+                                Command="{x:Bind ViewModel.RateQuarterCommand}"
+                                Content="0.25x"
+                                IsChecked="{x:Bind ViewModel.IsRateQuarter, Mode=OneWay}" />
+                            <ToggleButton
+                                x:Name="RateDoubleBtn"
+                                Style="{StaticResource OpToggleStyle}"
+                                Command="{x:Bind ViewModel.RateDoubleCommand}"
+                                Content="2x"
+                                IsChecked="{x:Bind ViewModel.IsRateDouble, Mode=OneWay}" />
+
+                            <Border Width="3" Margin="12,8" Background="#FF475569" />
+
+                            <ToggleButton
+                                x:Name="PenRedBtn"
+                                Style="{StaticResource OpPenSwatchToggleStyle}"
+                                Command="{x:Bind ViewModel.SelectPenRedCommand}"
+                                IsChecked="{x:Bind ViewModel.IsPenRed, Mode=OneWay}"
+                                ToolTipService.ToolTip="赤ペン">
+                                <Ellipse x:Name="PenRedSwatch" Width="26" Height="26" Fill="#FFEF4444" IsHitTestVisible="False" />
+                            </ToggleButton>
+                            <ToggleButton
+                                x:Name="PenGreenBtn"
+                                Style="{StaticResource OpPenSwatchToggleStyle}"
+                                Command="{x:Bind ViewModel.SelectPenGreenCommand}"
+                                IsChecked="{x:Bind ViewModel.IsPenGreen, Mode=OneWay}"
+                                ToolTipService.ToolTip="緑ペン">
+                                <Ellipse x:Name="PenGreenSwatch" Width="26" Height="26" Fill="#FF22C55E" IsHitTestVisible="False" />
+                            </ToggleButton>
+                            <ToggleButton
+                                x:Name="PenBlueBtn"
+                                Style="{StaticResource OpPenSwatchToggleStyle}"
+                                Command="{x:Bind ViewModel.SelectPenBlueCommand}"
+                                IsChecked="{x:Bind ViewModel.IsPenBlue, Mode=OneWay}"
+                                ToolTipService.ToolTip="青ペン">
+                                <Ellipse x:Name="PenBlueSwatch" Width="26" Height="26" Fill="#FF3B82F6" IsHitTestVisible="False" />
+                            </ToggleButton>
+                            <ToggleButton
+                                x:Name="PenEraserBtn"
+                                Style="{StaticResource OpToggleStyle}"
                                 MinWidth="48"
-                                Margin="4,0"
+                                Padding="0"
+                                Command="{x:Bind ViewModel.SelectPenEraserCommand}"
+                                IsChecked="{x:Bind ViewModel.IsPenEraser, Mode=OneWay}"
+                                ToolTipService.ToolTip="消しゴム">
+                                <Viewbox Width="30" Height="30" IsHitTestVisible="False">
+                                    <Grid Width="24" Height="24">
+                                        <Border
+                                            Width="18"
+                                            Height="10"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            BorderBrush="#FF42A5F5"
+                                            BorderThickness="2.2"
+                                            CornerRadius="2.2"
+                                            RenderTransformOrigin="0.5,0.5">
+                                            <Border.RenderTransform>
+                                                <RotateTransform Angle="-45" />
+                                            </Border.RenderTransform>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="0.32*" />
+                                                    <ColumnDefinition Width="0.68*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Rectangle Grid.Column="0" Fill="#FFFFFFFF" />
+                                                <Rectangle Grid.Column="1" Fill="#FF42A5F5" />
+                                            </Grid>
+                                        </Border>
+                                    </Grid>
+                                </Viewbox>
+                            </ToggleButton>
+                            <Border
+                                Margin="4,0,0,0"
+                                Padding="4"
                                 VerticalAlignment="Center"
-                                HorizontalAlignment="Center"
-                                FontFamily="Consolas"
-                                FontSize="15"
-                                FontWeight="SemiBold"
-                                Foreground="{StaticResource OpTextBrush}"
-                                Text="{x:Bind ViewModel.PenThicknessLabel, Mode=OneWay}"
-                                TextAlignment="Center" />
-                            <Button
-                                x:Name="PenThicknessPlusBtn"
-                                Style="{StaticResource OpButtonCompactStyle}"
-                                Content="＋"
-                                Command="{x:Bind ViewModel.IncreasePenThicknessCommand}" />
-                        </StackPanel>
-                    </Border>
+                                Background="{StaticResource OpControlFillBrush}"
+                                CornerRadius="8"
+                                ToolTipService.ToolTip="ペン太さプリセット">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <StackPanel
+                                        Orientation="Horizontal"
+                                        Spacing="4"
+                                        Visibility="{x:Bind ViewModel.PenThicknessPresetVisibility, Mode=OneWay}">
+                                        <ToggleButton
+                                            x:Name="PenThicknessPreset1Btn"
+                                            Style="{StaticResource OpToggleStyle}"
+                                            MinWidth="44"
+                                            Command="{x:Bind ViewModel.SelectPenThicknessPreset1Command}"
+                                            Content="{x:Bind ViewModel.PenThicknessPreset1Label, Mode=OneWay}"
+                                            IsChecked="{x:Bind ViewModel.IsPenThicknessPreset1, Mode=OneWay}" />
+                                        <ToggleButton
+                                            x:Name="PenThicknessPreset2Btn"
+                                            Style="{StaticResource OpToggleStyle}"
+                                            MinWidth="44"
+                                            Command="{x:Bind ViewModel.SelectPenThicknessPreset2Command}"
+                                            Content="{x:Bind ViewModel.PenThicknessPreset2Label, Mode=OneWay}"
+                                            IsChecked="{x:Bind ViewModel.IsPenThicknessPreset2, Mode=OneWay}" />
+                                        <ToggleButton
+                                            x:Name="PenThicknessPreset3Btn"
+                                            Style="{StaticResource OpToggleStyle}"
+                                            MinWidth="44"
+                                            Command="{x:Bind ViewModel.SelectPenThicknessPreset3Command}"
+                                            Content="{x:Bind ViewModel.PenThicknessPreset3Label, Mode=OneWay}"
+                                            IsChecked="{x:Bind ViewModel.IsPenThicknessPreset3, Mode=OneWay}" />
+                                    </StackPanel>
+                                    <TextBlock
+                                        MinWidth="48"
+                                        Margin="4,0"
+                                        VerticalAlignment="Center"
+                                        HorizontalAlignment="Center"
+                                        FontFamily="Consolas"
+                                        FontSize="15"
+                                        FontWeight="SemiBold"
+                                        Foreground="{StaticResource OpTextBrush}"
+                                        Text="{x:Bind ViewModel.EraserThicknessLabel, Mode=OneWay}"
+                                        TextAlignment="Center"
+                                        Visibility="{x:Bind ViewModel.EraserThicknessLabelVisibility, Mode=OneWay}" />
+                                </StackPanel>
+                            </Border>
 
-                    <Button
-                        x:Name="ClearInkBtn"
-                        Style="{StaticResource OpButtonStyle}"
-                        MinWidth="140"
-                        Command="{x:Bind ViewModel.ClearInkCommand}"
-                        Content="全消去" />
-                    </StackPanel>
-                </ScrollViewer>
-                <StackPanel
-                    Grid.Column="1"
-                    Margin="12,0,0,0"
-                    Orientation="Vertical"
-                    Spacing="4"
-                    VerticalAlignment="Center">
-                    <Button
-                        x:Name="EditModeBtn"
-                        Style="{StaticResource OpButtonSideStyle}"
-                        Command="{x:Bind ViewModel.ToggleEditModeCommand}"
-                        Content="編集" />
-                    <Button
-                        x:Name="SettingsBtn"
-                        Style="{StaticResource OpButtonSideStyle}"
-                        IsEnabled="{x:Bind ViewModel.IsEditMode, Mode=OneWay}"
-                        Command="{x:Bind ViewModel.OpenSettingsCommand}"
-                        Content="設定" />
-                </StackPanel>
-            </Grid>
-        </Border>
+                            <Button
+                                x:Name="ClearInkBtn"
+                                Style="{StaticResource OpButtonStyle}"
+                                MinWidth="140"
+                                Command="{x:Bind ViewModel.ClearInkCommand}"
+                                Content="全消去" />
+                            </StackPanel>
+                        </ScrollViewer>
+                        <StackPanel
+                            Grid.Column="1"
+                            Margin="12,0,0,0"
+                            Orientation="Vertical"
+                            Spacing="4"
+                            VerticalAlignment="Center">
+                            <Button
+                                x:Name="EditModeBtn"
+                                Style="{StaticResource OpButtonSideStyle}"
+                                Command="{x:Bind ViewModel.ToggleEditModeCommand}"
+                                Content="編集" />
+                            <Button
+                                x:Name="SettingsBtn"
+                                Style="{StaticResource OpButtonSideStyle}"
+                                IsEnabled="{x:Bind ViewModel.IsEditMode, Mode=OneWay}"
+                                Command="{x:Bind ViewModel.OpenSettingsCommand}"
+                                Content="設定" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </Grid>
 
         <!-- DEMO ウォーターマーク（画面全体に敷き詰め） -->
         <controls:DemoWatermarkOverlay
             x:Name="DemoWatermark"
-            Grid.RowSpan="4"
+            Grid.RowSpan="2"
             Grid.ColumnSpan="2"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch"
@@ -504,7 +523,7 @@
         <!-- 指タッチ用。ウィンドウ右上。下バーの再生/停止と同じコマンド -->
         <Button
             x:Name="OverlayPlayBtn"
-            Grid.RowSpan="4"
+            Grid.RowSpan="2"
             Grid.ColumnSpan="2"
             Width="160"
             Height="160"
@@ -526,7 +545,7 @@
         <!-- 負荷モニター（設定で ON）。クリックを邪魔しない -->
         <Border
             x:Name="PerfMonitorOverlay"
-            Grid.RowSpan="4"
+            Grid.RowSpan="2"
             Grid.ColumnSpan="2"
             Margin="12,0,12,12"
             Padding="10,6"

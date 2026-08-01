@@ -97,6 +97,7 @@ internal static class MediaFramePump
             }
 
             _hooked = false;
+            VideoFrameRelay.Clear(_player);
             DisposeBuffers_NoLock();
         }
 

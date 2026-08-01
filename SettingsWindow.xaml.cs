@@ -12,6 +12,14 @@ namespace Kakikomi;
 
 public sealed partial class SettingsWindow : Window
 {
+    private sealed class SettingsNavEntry
+    {
+        public required string Label { get; init; }
+        public string? PanelTag { get; init; }
+
+        public override string ToString() => Label;
+    }
+
     private bool _loadingUi;
     private int _editingPenSlot; // 1/2/3, 0=閉じ
     private CancellationTokenSource? _releaseNotesCts;
@@ -22,23 +30,100 @@ public sealed partial class SettingsWindow : Window
         InitializeComponent();
         Title = "Kakikomi 設定";
         TrySetIcon();
+        BuildNavTree();
         WireEvents();
         LoadFromSettings();
         VersionInfoText.Text = $"Kakikomi v{AppVersionReader.GetCurrentVersion()}";
+        SelectNavPanel("Clean");
+    }
 
-        if (NavList.Items.Count > 0)
+    private void BuildNavTree()
+    {
+        NavTree.RootNodes.Clear();
+        NavTree.RootNodes.Add(MakeLeaf("ソフト終了", "Exit"));
+        NavTree.RootNodes.Add(MakeGroup(
+            "アプリ",
+            expanded: true,
+            MakeLeaf("バージョン / 更新", "Version"),
+            MakeLeaf("DEMOモード", "Demo"),
+            MakeLeaf("LAN 遠隔操作", "Remote"),
+            MakeLeaf("コンパネ起動サイズ", "FullSize"),
+            MakeLeaf("負荷・ログ", "LoadLog")));
+        NavTree.RootNodes.Add(MakeGroup(
+            "映像・出力",
+            expanded: true,
+            MakeLeaf("クリーン出力", "Clean")));
+        NavTree.RootNodes.Add(MakeGroup(
+            "ネタ・ファイル",
+            expanded: false,
+            MakeLeaf("保存", "Save"),
+            MakeLeaf(".mov 変換", "Convert"),
+            MakeLeaf("ネタ一覧", "NetaList")));
+        NavTree.RootNodes.Add(MakeGroup(
+            "操作・描画",
+            expanded: false,
+            MakeLeaf("再生", "Playback"),
+            MakeLeaf("パレットの色編集", "Palette"),
+            MakeLeaf("ペンサイズ", "PenSize")));
+    }
+
+    private static TreeViewNode MakeLeaf(string label, string panelTag) =>
+        new()
         {
-            foreach (var item in NavList.Items)
-            {
-                if (item is ListViewItem lvi && lvi.Tag as string == "Clean")
-                {
-                    NavList.SelectedItem = lvi;
-                    break;
-                }
-            }
+            Content = new SettingsNavEntry { Label = label, PanelTag = panelTag }
+        };
+
+    private static TreeViewNode MakeGroup(string label, bool expanded, params TreeViewNode[] children)
+    {
+        var node = new TreeViewNode
+        {
+            Content = new SettingsNavEntry { Label = label },
+            IsExpanded = expanded
+        };
+        foreach (var child in children)
+            node.Children.Add(child);
+        return node;
+    }
+
+    private void SelectNavPanel(string panelTag)
+    {
+        ShowPanel(panelTag);
+        foreach (var root in NavTree.RootNodes)
+        {
+            if (TrySelectNavNode(root, panelTag))
+                break;
+        }
+    }
+
+    private bool TrySelectNavNode(TreeViewNode node, string panelTag)
+    {
+        if (node.Content is SettingsNavEntry { PanelTag: var tag } && tag == panelTag)
+        {
+            NavTree.SelectedItem = node;
+            return true;
         }
 
-        ShowPanel("Clean");
+        foreach (var child in node.Children)
+        {
+            if (!TrySelectNavNode(child, panelTag))
+                continue;
+
+            node.IsExpanded = true;
+            return true;
+        }
+
+        return false;
+    }
+
+    private void OnNavTreeItemInvoked(TreeView sender, TreeViewItemInvokedEventArgs args)
+    {
+        if (args.InvokedItem is not TreeViewNode node)
+            return;
+
+        if (node.Content is not SettingsNavEntry { PanelTag: { } panelTag })
+            return;
+
+        ShowPanel(panelTag);
     }
 
     private void TrySetIcon()
@@ -57,13 +142,6 @@ public sealed partial class SettingsWindow : Window
 
     private void WireEvents()
     {
-        NavList.SelectionChanged += (_, _) =>
-        {
-            var tag = (NavList.SelectedItem as ListViewItem)?.Tag as string;
-            if (!string.IsNullOrEmpty(tag))
-                ShowPanel(tag);
-        };
-
         OpenCleanBtn.Click += (_, _) => App.OpenCleanWindow();
         ExitAppBtn.Click += (_, _) => App.RequestExit();
         OpenSaveFolderBtn.Click += (_, _) =>
@@ -99,11 +177,34 @@ public sealed partial class SettingsWindow : Window
         RgbGBox.ValueChanged += OnRgbBoxChanged;
         RgbBBox.ValueChanged += OnRgbBoxChanged;
 
-        PenSizeBox.ValueChanged += (_, args) =>
+        PenPreset1Box.ValueChanged += (_, args) =>
         {
             if (_loadingUi || double.IsNaN(args.NewValue))
                 return;
-            AppSettings.SetPenThickness(args.NewValue);
+            AppSettings.SetPenThicknessPreset(0, args.NewValue);
+        };
+
+        PenPreset2Box.ValueChanged += (_, args) =>
+        {
+            if (_loadingUi || double.IsNaN(args.NewValue))
+                return;
+            AppSettings.SetPenThicknessPreset(1, args.NewValue);
+        };
+
+        PenPreset3Box.ValueChanged += (_, args) =>
+        {
+            if (_loadingUi || double.IsNaN(args.NewValue))
+                return;
+            AppSettings.SetPenThicknessPreset(2, args.NewValue);
+        };
+
+        ResetPenPresetsBtn.Click += (_, _) =>
+        {
+            if (_loadingUi)
+                return;
+
+            AppSettings.ResetPenThicknessPresetsToDefault();
+            LoadPenPresetBoxes();
         };
 
         EraserSizeBox.ValueChanged += (_, args) =>
@@ -111,6 +212,13 @@ public sealed partial class SettingsWindow : Window
             if (_loadingUi || double.IsNaN(args.NewValue))
                 return;
             AppSettings.SetEraserThickness(args.NewValue);
+        };
+
+        ControlPanelChromeAtTopCheck.Click += (_, _) =>
+        {
+            if (_loadingUi)
+                return;
+            AppSettings.SetControlPanelChromeAtTop(ControlPanelChromeAtTopCheck.IsChecked == true);
         };
 
         // Checked/Unchecked はウィンドウ閉鎖時にも発火し、false で上書きすることがあるため Click のみ保存する
@@ -125,6 +233,20 @@ public sealed partial class SettingsWindow : Window
             if (_loadingUi)
                 return;
             AppSettings.SetResumePlayback(ResumePlaybackCheck.IsChecked == true);
+        };
+
+        VariableSpeedAudioCheck.Click += (_, _) =>
+        {
+            if (_loadingUi)
+                return;
+            AppSettings.SetVariableSpeedAudioEnabled(VariableSpeedAudioCheck.IsChecked == true);
+        };
+
+        NetaSwitchCrossfadeCheck.Click += (_, _) =>
+        {
+            if (_loadingUi)
+                return;
+            AppSettings.SetNetaSwitchCrossfadeEnabled(NetaSwitchCrossfadeCheck.IsChecked == true);
         };
 
         OverlayPlayButtonCheck.Click += (_, _) =>
@@ -196,6 +318,10 @@ public sealed partial class SettingsWindow : Window
         };
 
         FullScreenNowBtn.Click += (_, _) => App.EnterControlPanelFullScreen();
+
+        NetaThumbScale1Radio.Checked += (_, _) => OnNetaThumbnailScaleChecked(1.0);
+        NetaThumbScale12Radio.Checked += (_, _) => OnNetaThumbnailScaleChecked(1.2);
+        NetaThumbScale15Radio.Checked += (_, _) => OnNetaThumbnailScaleChecked(1.5);
 
         DemoUnlockBtn.Click += (_, _) =>
         {
@@ -432,10 +558,13 @@ public sealed partial class SettingsWindow : Window
             SetSwatch(SwatchRed, AppSettings.PenRed);
             SetSwatch(SwatchGreen, AppSettings.PenGreen);
             SetSwatch(SwatchBlue, AppSettings.PenBlue);
-            PenSizeBox.Value = AppSettings.PenThickness;
+            LoadPenPresetBoxes();
             EraserSizeBox.Value = AppSettings.EraserThickness;
             FullSizeNextLaunchCheck.IsChecked = AppSettings.LaunchControlPanelFullSize;
+            ControlPanelChromeAtTopCheck.IsChecked = AppSettings.ControlPanelChromeAtTop;
             ResumePlaybackCheck.IsChecked = AppSettings.ResumePlayback;
+            VariableSpeedAudioCheck.IsChecked = AppSettings.VariableSpeedAudioEnabled;
+            NetaSwitchCrossfadeCheck.IsChecked = AppSettings.NetaSwitchCrossfadeEnabled;
             OverlayPlayButtonCheck.IsChecked = AppSettings.OverlayPlayButton;
             NetaLoopCheck.IsChecked = RemoteNetaLoopService.Instance.IsRunning;
             PerfMonitorCheck.IsChecked = AppSettings.PerfMonitorEnabled;
@@ -443,6 +572,7 @@ public sealed partial class SettingsWindow : Window
             DiagnosticCaptureCheck.IsChecked = AppSettings.DiagnosticCaptureEnabled;
             DiagnosticCaptureIntervalBox.Value = AppSettings.DiagnosticCaptureIntervalMinutes;
             RefreshRemotePanel();
+            ApplyNetaThumbnailScaleUi();
             SaveFolderPathText.Text = SaveFolderService.EnsureExists();
             ConvertFolderPathText.Text = MovTranscodeService.EnsureCacheDirectory();
             RefreshDemoPanel();
@@ -452,6 +582,29 @@ public sealed partial class SettingsWindow : Window
         {
             _loadingUi = false;
         }
+    }
+
+    private void LoadPenPresetBoxes()
+    {
+        PenPreset1Box.Value = AppSettings.GetPenThicknessPreset(0);
+        PenPreset2Box.Value = AppSettings.GetPenThicknessPreset(1);
+        PenPreset3Box.Value = AppSettings.GetPenThicknessPreset(2);
+    }
+
+    private void OnNetaThumbnailScaleChecked(double scale)
+    {
+        if (_loadingUi)
+            return;
+
+        AppSettings.SetNetaThumbnailScale(scale);
+    }
+
+    private void ApplyNetaThumbnailScaleUi()
+    {
+        var scale = AppSettings.NetaThumbnailScale;
+        NetaThumbScale1Radio.IsChecked = Math.Abs(scale - 1.0) < 0.01;
+        NetaThumbScale12Radio.IsChecked = Math.Abs(scale - 1.2) < 0.01;
+        NetaThumbScale15Radio.IsChecked = Math.Abs(scale - 1.5) < 0.01;
     }
 
     private void OnPen1SwatchClick(object sender, RoutedEventArgs e) => OpenColorEditor(1);
@@ -605,6 +758,7 @@ public sealed partial class SettingsWindow : Window
         PanelPalette.Visibility = tag == "Palette" ? Visibility.Visible : Visibility.Collapsed;
         PanelPenSize.Visibility = tag == "PenSize" ? Visibility.Visible : Visibility.Collapsed;
         PanelFullSize.Visibility = tag == "FullSize" ? Visibility.Visible : Visibility.Collapsed;
+        PanelLoadLog.Visibility = tag == "LoadLog" ? Visibility.Visible : Visibility.Collapsed;
 
         if (tag != "Palette")
             CloseColorEditor();

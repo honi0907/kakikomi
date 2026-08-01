@@ -8,6 +8,9 @@ namespace Kakikomi;
 
 public sealed partial class CleanOutputWindow : Window
 {
+    private int? _lastCleanVisibleSlot;
+    private CancellationTokenSource? _cleanSlotFadeCts;
+
     public CleanOutputWindow()
     {
         InitializeComponent();
@@ -21,7 +24,8 @@ public sealed partial class CleanOutputWindow : Window
     {
         PlayerElementA.Attach(session.GetCleanPlayerForSlot(0));
         PlayerElementB.Attach(session.GetCleanPlayerForSlot(1));
-        UpdateCleanSlotVisibility(session.VisibleSlotIndex);
+        _lastCleanVisibleSlot = session.VisibleSlotIndex;
+        ApplyCleanSlotInstant(session.VisibleSlotIndex);
         InkLayer.Attach(session, inputEnabled: false);
         session.VisibleSlotChanged += OnVisibleSlotChanged;
         DiagnosticCaptureService.Instance.RegisterCleanSurface(CleanPreviewSurface);
@@ -43,22 +47,52 @@ public sealed partial class CleanOutputWindow : Window
         if (session is null)
             return;
 
-        PlayerElementA.Attach(session.GetCleanPlayerForSlot(0));
-        PlayerElementB.Attach(session.GetCleanPlayerForSlot(1));
-        await session.PrimeVisibleSlotFrameAsync(visibleSlotIndex);
-        UpdateCleanSlotVisibility(visibleSlotIndex);
+        _cleanSlotFadeCts?.Cancel();
+        _cleanSlotFadeCts?.Dispose();
+        _cleanSlotFadeCts = new CancellationTokenSource();
+        var token = _cleanSlotFadeCts.Token;
+
+        var incomingHost = visibleSlotIndex == 0 ? PlayerElementA : PlayerElementB;
+        var outgoingHost = visibleSlotIndex == 0 ? PlayerElementB : PlayerElementA;
+        var previousVisibleSlot = _lastCleanVisibleSlot;
+
+        incomingHost.Attach(session.GetCleanPlayerForSlot(visibleSlotIndex));
+
+        try
+        {
+            await session.PrimeVisibleSlotFrameAsync(visibleSlotIndex, token);
+            await VideoSlotCrossfade.ApplySlotSwitchAsync(
+                PlayerElementA,
+                PlayerElementB,
+                visibleSlotIndex,
+                previousVisibleSlot,
+                token);
+            if (token.IsCancellationRequested)
+                return;
+
+            outgoingHost.Attach(session.GetCleanPlayerForSlot(1 - visibleSlotIndex));
+            _lastCleanVisibleSlot = visibleSlotIndex;
+        }
+        catch (OperationCanceledException)
+        {
+            _lastCleanVisibleSlot = visibleSlotIndex;
+        }
     }
 
-    private void UpdateCleanSlotVisibility(int visibleSlotIndex)
+    private void ApplyCleanSlotInstant(int visibleSlotIndex)
     {
         if (visibleSlotIndex == 0)
         {
+            PlayerElementA.Opacity = 1;
             PlayerElementA.Visibility = Visibility.Visible;
+            PlayerElementB.Opacity = 1;
             PlayerElementB.Visibility = Visibility.Collapsed;
         }
         else
         {
+            PlayerElementB.Opacity = 1;
             PlayerElementB.Visibility = Visibility.Visible;
+            PlayerElementA.Opacity = 1;
             PlayerElementA.Visibility = Visibility.Collapsed;
         }
     }

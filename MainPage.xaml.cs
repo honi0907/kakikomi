@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
+using Kakikomi.Helpers;
 using Kakikomi.Services;
 using Kakikomi.ViewModels;
 
@@ -17,6 +18,9 @@ public sealed partial class MainPage : Page
     private static readonly Color DisabledBg = Color.FromArgb(255, 46, 58, 79);
     private static readonly Color DisabledFg = Color.FromArgb(255, 148, 163, 184);
     private static readonly Color White = Color.FromArgb(255, 255, 255, 255);
+
+    private int? _lastOperatorVisibleSlot;
+    private CancellationTokenSource? _operatorSlotFadeCts;
 
     public MainPageViewModel ViewModel { get; }
 
@@ -40,7 +44,8 @@ public sealed partial class MainPage : Page
         Loaded -= OnLoaded;
         OperatorPlayerA.Attach(ViewModel.Session.GetOperatorPlayerForSlot(0));
         OperatorPlayerB.Attach(ViewModel.Session.GetOperatorPlayerForSlot(1));
-        UpdateOperatorSlotVisibility(ViewModel.Session.VisibleSlotIndex);
+        _lastOperatorVisibleSlot = ViewModel.Session.VisibleSlotIndex;
+        ApplyOperatorSlotInstant(ViewModel.Session.VisibleSlotIndex);
         InkLayer.Attach(ViewModel.Session, inputEnabled: true);
         ViewModel.PenChanged += OnPenChanged;
         ViewModel.TimelineSliderSync += OnTimelineSliderSync;
@@ -55,10 +60,12 @@ public sealed partial class MainPage : Page
         UpdateOverlayPlayVisibility();
         UpdatePerfMonitorVisibility();
         UpdateRateToggleLooks();
+        UpdatePenThicknessPresetLooks();
         UpdateEraserToggleLook();
         UpdateEditModeButtonLook();
         UpdateNetaListReorderMode();
         ApplyPenSwatches();
+        ApplyControlPanelChromeDock();
         UpdateDemoWatermark();
         ViewModel.SetPenRed();
         OnTimelineSliderSync(ViewModel.TimelinePosition, ViewModel.TimelineMaximum);
@@ -87,24 +94,55 @@ public sealed partial class MainPage : Page
 
     private async Task ApplyVisibleSlotAsync(int visibleSlotIndex)
     {
+        _operatorSlotFadeCts?.Cancel();
+        _operatorSlotFadeCts?.Dispose();
+        _operatorSlotFadeCts = new CancellationTokenSource();
+        var token = _operatorSlotFadeCts.Token;
+
         var session = ViewModel.Session;
-        OperatorPlayerA.Attach(session.GetOperatorPlayerForSlot(0));
-        OperatorPlayerB.Attach(session.GetOperatorPlayerForSlot(1));
-        await session.PrimeVisibleSlotFrameAsync(visibleSlotIndex);
-        UpdateOperatorSlotVisibility(visibleSlotIndex);
+        var incomingHost = visibleSlotIndex == 0 ? OperatorPlayerA : OperatorPlayerB;
+        var outgoingHost = visibleSlotIndex == 0 ? OperatorPlayerB : OperatorPlayerA;
+        var previousVisibleSlot = _lastOperatorVisibleSlot;
+
+        // 表示中ホストへ両方 Attach すると静止画が消える。incoming だけ先に付ける（Loaded 時の初回は別途）。
+        incomingHost.Attach(session.GetOperatorPlayerForSlot(visibleSlotIndex));
+
+        try
+        {
+            await session.PrimeVisibleSlotFrameAsync(visibleSlotIndex, token);
+            await VideoSlotCrossfade.ApplySlotSwitchAsync(
+                OperatorPlayerA,
+                OperatorPlayerB,
+                visibleSlotIndex,
+                previousVisibleSlot,
+                token);
+            if (token.IsCancellationRequested)
+                return;
+
+            outgoingHost.Attach(session.GetOperatorPlayerForSlot(1 - visibleSlotIndex));
+            _lastOperatorVisibleSlot = visibleSlotIndex;
+        }
+        catch (OperationCanceledException)
+        {
+            // 連続切替で古いフェードは破棄。エンジン側の表示スロットは既に切り替わっている。
+            _lastOperatorVisibleSlot = visibleSlotIndex;
+        }
     }
 
-    private void UpdateOperatorSlotVisibility(int visibleSlotIndex)
+    private void ApplyOperatorSlotInstant(int visibleSlotIndex)
     {
-        // 新スロットを先に Visible にする（Z 順で上）。旧映像の黒抜けを防ぐ。
         if (visibleSlotIndex == 0)
         {
+            OperatorPlayerA.Opacity = 1;
             OperatorPlayerA.Visibility = Visibility.Visible;
+            OperatorPlayerB.Opacity = 1;
             OperatorPlayerB.Visibility = Visibility.Collapsed;
         }
         else
         {
+            OperatorPlayerB.Opacity = 1;
             OperatorPlayerB.Visibility = Visibility.Visible;
+            OperatorPlayerA.Opacity = 1;
             OperatorPlayerA.Visibility = Visibility.Collapsed;
         }
     }
@@ -131,8 +169,15 @@ public sealed partial class MainPage : Page
             UpdateRateToggleLooks();
         }
 
-        if (e.PropertyName == nameof(ViewModel.IsPenEraser))
+        if (e.PropertyName is nameof(ViewModel.IsPenEraser))
             UpdateEraserToggleLook();
+
+        if (e.PropertyName is nameof(ViewModel.IsPenThicknessPreset1)
+            or nameof(ViewModel.IsPenThicknessPreset2)
+            or nameof(ViewModel.IsPenThicknessPreset3))
+        {
+            UpdatePenThicknessPresetLooks();
+        }
     }
 
     private void OnAppSettingsChanged()
@@ -150,12 +195,51 @@ public sealed partial class MainPage : Page
     private void ApplySettingsToUi()
     {
         ApplyPenSwatches();
+        ViewModel.RefreshPenThicknessPresets();
         ViewModel.ReapplyActivePen();
+        ViewModel.RefreshNetaThumbnailMetrics();
+        ViewModel.Session.RefreshMutePolicy();
+        ViewModel.RefreshPlaybackChrome();
+        ApplyControlPanelChromeDock();
         UpdateDemoWatermark();
         UpdateOverlayPlayVisibility();
         UpdatePerfMonitorVisibility();
         PerfMonitorService.Instance.ApplyFromSettings();
         DiagnosticCaptureService.Instance.ApplyFromSettings();
+    }
+
+    private void ApplyControlPanelChromeDock()
+    {
+        var atTop = AppSettings.ControlPanelChromeAtTop;
+
+        OperatorChromeTopDock.Children.Clear();
+        OperatorChromeBottomDock.Children.Clear();
+
+        var host = atTop ? OperatorChromeTopDock : OperatorChromeBottomDock;
+        var inactive = atTop ? OperatorChromeBottomDock : OperatorChromeTopDock;
+
+        inactive.Visibility = Visibility.Collapsed;
+        host.Visibility = Visibility.Visible;
+
+        OperatorChromeTopRow.Height = atTop ? GridLength.Auto : new GridLength(0);
+        OperatorChromeBottomRow.Height = atTop ? new GridLength(0) : GridLength.Auto;
+
+        if (atTop)
+        {
+            host.Children.Add(OperatorButtonBarHost);
+            host.Children.Add(OperatorSeekBarHost);
+        }
+        else
+        {
+            host.Children.Add(OperatorSeekBarHost);
+            host.Children.Add(OperatorButtonBarHost);
+        }
+
+        OperatorButtonBarHost.BorderThickness = new Thickness(1);
+        OperatorButtonBarHost.CornerRadius = new CornerRadius(8);
+        OperatorSeekBarHost.BorderThickness = new Thickness(1);
+        OperatorSeekBarHost.CornerRadius = new CornerRadius(8);
+        OperatorVideoHost.CornerRadius = new CornerRadius(8);
     }
 
     private void UpdateDemoWatermark() =>
@@ -212,8 +296,9 @@ public sealed partial class MainPage : Page
         ApplyChrome(SkipBackBtn, IdleBg, IdleFg);
         ApplyChrome(SkipForwardBtn, IdleBg, IdleFg);
         ApplyChrome(ClearInkBtn, IdleBg, IdleFg);
-        ApplyChrome(PenThicknessMinusBtn, IdleBg, IdleFg);
-        ApplyChrome(PenThicknessPlusBtn, IdleBg, IdleFg);
+        ApplyChrome(PenThicknessPreset1Btn, IdleBg, IdleFg);
+        ApplyChrome(PenThicknessPreset2Btn, IdleBg, IdleFg);
+        ApplyChrome(PenThicknessPreset3Btn, IdleBg, IdleFg);
     }
 
     private void UpdatePlayToggleLook()
@@ -246,6 +331,13 @@ public sealed partial class MainPage : Page
     {
         var checkedBg = Color.FromArgb(255, 71, 85, 105);
         ApplySelectionChrome(PenEraserBtn, ViewModel.IsPenEraser, checkedBg);
+    }
+
+    private void UpdatePenThicknessPresetLooks()
+    {
+        ApplySelectionChrome(PenThicknessPreset1Btn, ViewModel.IsPenThicknessPreset1, SelectedRateBg);
+        ApplySelectionChrome(PenThicknessPreset2Btn, ViewModel.IsPenThicknessPreset2, SelectedRateBg);
+        ApplySelectionChrome(PenThicknessPreset3Btn, ViewModel.IsPenThicknessPreset3, SelectedRateBg);
     }
 
     private static void ApplySelectionChrome(Control button, bool selected, Color selectedBg)

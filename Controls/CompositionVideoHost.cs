@@ -30,10 +30,11 @@ public sealed class CompositionVideoHost : Grid
     private int _pendingWidth;
     private int _pendingHeight;
     private int _drawFailures;
+    private bool _skipVisibilityReset;
 
     public CompositionVideoHost()
     {
-        Background = new SolidColorBrush(Color.FromArgb(255, 0, 0, 0));
+        Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
         _image = new Image
         {
             Stretch = Stretch.Uniform,
@@ -81,11 +82,26 @@ public sealed class CompositionVideoHost : Grid
         if (target is null || width <= 0 || height <= 0)
             return;
 
-        lock (_drawLock)
+        try
         {
-            _pendingTarget = target;
-            _pendingWidth = width;
-            _pendingHeight = height;
+            lock (_drawLock)
+            {
+                if (!EnsurePendingTarget_NoLock(width, height) || _pendingTarget is null)
+                    return;
+
+                // Relay は Pump の共有バッファ参照。購読解除後は破棄済みになり得るので必ずコピーする。
+                using var session = _pendingTarget.CreateDrawingSession();
+                session.Clear(Color.FromArgb(255, 0, 0, 0));
+                session.DrawImage(target);
+            }
+
+            QueueDraw();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[CompositionVideoHost] relay adopt: {ex.Message}");
+            lock (_drawLock)
+                ClearPendingFrame_NoLock();
         }
     }
 
@@ -124,18 +140,90 @@ public sealed class CompositionVideoHost : Grid
         _subscription = null;
     }
 
+    /// <summary>クロスフェード用。Grid ではなく映像 Image だけの不透明度。</summary>
+    internal void SetVideoOpacity(double opacity) => _image.Opacity = opacity;
+
+    /// <summary>クロスフェード開始: 古い ImageSource を残したまま表示し、映像だけ透明にする。</summary>
+    internal void BeginIncomingCrossfade()
+    {
+        _skipVisibilityReset = true;
+        try
+        {
+            Opacity = 1;
+            Visibility = Visibility.Visible;
+            SetVideoOpacity(0);
+            DrawPending();
+        }
+        finally
+        {
+            _skipVisibilityReset = false;
+        }
+    }
+
+    /// <summary>クロスフェード終了後に非表示へ。</summary>
+    internal void FinishOutgoingCrossfade()
+    {
+        Opacity = 1;
+        SetVideoOpacity(1);
+        Visibility = Visibility.Collapsed;
+        ResetImageSource();
+    }
+
+    /// <summary>即時切替後の状態を整える。</summary>
+    internal void FinishIncomingInstant()
+    {
+        Opacity = 1;
+        SetVideoOpacity(1);
+        Visibility = Visibility.Visible;
+    }
+
+    internal void FinishOutgoingInstant()
+    {
+        Opacity = 1;
+        SetVideoOpacity(1);
+        Visibility = Visibility.Collapsed;
+        ResetImageSource();
+    }
+
+    internal void ShowInstant()
+    {
+        _skipVisibilityReset = true;
+        try
+        {
+            Opacity = 1;
+            Visibility = Visibility.Visible;
+            ResetImageSource();
+            DrawPending();
+            SetVideoOpacity(1);
+        }
+        finally
+        {
+            _skipVisibilityReset = false;
+        }
+    }
+
+    internal void HideInstant()
+    {
+        FinishOutgoingInstant();
+    }
+
     private void OnVisibilityChanged(DependencyObject sender, DependencyProperty dp)
     {
+        if (_skipVisibilityReset)
+            return;
+
         if (Visibility == Visibility.Visible)
         {
             // 非表示中に溜まった古い ImageSource を捨て、最新の pending を描く。
             ResetImageSource();
             DrawPending();
+            SetVideoOpacity(1);
             return;
         }
 
         // 非表示にしたら前ネタの静止画を残さない。
         ResetImageSource();
+        SetVideoOpacity(1);
     }
 
     private void ResetImageSource()
@@ -151,9 +239,60 @@ public sealed class CompositionVideoHost : Grid
 
     private void ClearPendingFrame_NoLock()
     {
+        try
+        {
+            _pendingTarget?.Dispose();
+        }
+        catch
+        {
+            // ignore
+        }
+
         _pendingTarget = null;
         _pendingWidth = 0;
         _pendingHeight = 0;
+    }
+
+    private bool EnsurePendingTarget_NoLock(int width, int height)
+    {
+        if (_pendingTarget is not null && _pendingWidth == width && _pendingHeight == height)
+            return true;
+
+        try
+        {
+            _pendingTarget?.Dispose();
+            _pendingTarget = null;
+            _pendingWidth = 0;
+            _pendingHeight = 0;
+
+            var device = CanvasDevice.GetSharedDevice();
+            if (device.IsDeviceLost())
+                device = new CanvasDevice();
+
+            _pendingTarget = new CanvasRenderTarget(device, width, height, 96);
+            _pendingWidth = width;
+            _pendingHeight = height;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[CompositionVideoHost] pending: {ex.Message}");
+            try
+            {
+                _pendingTarget?.Dispose();
+                _pendingTarget = new CanvasRenderTarget(new CanvasDevice(), width, height, 96);
+                _pendingWidth = width;
+                _pendingHeight = height;
+                return true;
+            }
+            catch
+            {
+                _pendingTarget = null;
+                _pendingWidth = 0;
+                _pendingHeight = 0;
+                return false;
+            }
+        }
     }
 
     private void DisposeImageSource_NoLock()
@@ -163,11 +302,22 @@ public sealed class CompositionVideoHost : Grid
 
     private void OnFrameCopied(CanvasRenderTarget target, int width, int height)
     {
-        lock (_drawLock)
+        try
         {
-            _pendingTarget = target;
-            _pendingWidth = width;
-            _pendingHeight = height;
+            lock (_drawLock)
+            {
+                if (!EnsurePendingTarget_NoLock(width, height) || _pendingTarget is null)
+                    return;
+
+                // MediaFramePump の共有バッファは次フレームで上書きされる。2倍速などで UI 描画が遅れると黒チラつきの原因になる。
+                using var session = _pendingTarget.CreateDrawingSession();
+                session.Clear(Color.FromArgb(255, 0, 0, 0));
+                session.DrawImage(target);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[CompositionVideoHost] frame copy: {ex.Message}");
         }
 
         QueueDraw();

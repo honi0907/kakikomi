@@ -42,7 +42,7 @@ public partial class App : Application
         Window = new MainWindow();
         Window.Closed += OnMainClosed;
         Window.Activate();
-        // Activate 直後だと overlapped 初期化と競合するため、即時＋遅延の両方で最大化を適用
+        // Activate 直後だと presenter 初期化と競合するため、即時＋遅延の両方でフルスクリーンを適用
         ApplyControlPanelLaunchSize();
         DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Normal, ApplyControlPanelLaunchSize);
         DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, ApplyControlPanelLaunchSize);
@@ -154,18 +154,11 @@ public partial class App : Application
 
         try
         {
-            var appWindow = Window.AppWindow;
-            if (appWindow.Presenter is not OverlappedPresenter presenter)
-            {
-                appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
-                presenter = (OverlappedPresenter)appWindow.Presenter;
-            }
-
-            presenter.Maximize();
+            Window.AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[LaunchFullSize] {ex}");
+            System.Diagnostics.Debug.WriteLine($"[LaunchFullScreen] {ex}");
         }
     }
 

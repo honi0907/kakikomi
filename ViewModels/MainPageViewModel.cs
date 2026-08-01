@@ -67,10 +67,34 @@ public partial class MainPageViewModel : ObservableObject
     private bool isPenEraser;
 
     [ObservableProperty]
-    private string penThicknessLabel = "太さ 8";
+    private bool isPenThicknessPreset1 = true;
 
     [ObservableProperty]
-    private bool isEditMode = true;
+    private bool isPenThicknessPreset2;
+
+    [ObservableProperty]
+    private bool isPenThicknessPreset3;
+
+    [ObservableProperty]
+    private string penThicknessPreset1Label = "8";
+
+    [ObservableProperty]
+    private string penThicknessPreset2Label = "16";
+
+    [ObservableProperty]
+    private string penThicknessPreset3Label = "24";
+
+    [ObservableProperty]
+    private string eraserThicknessLabel = "消 28";
+
+    public Visibility PenThicknessPresetVisibility =>
+        IsPenEraser ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility EraserThicknessLabelVisibility =>
+        IsPenEraser ? Visibility.Visible : Visibility.Collapsed;
+
+    [ObservableProperty]
+    private bool isEditMode = false;
 
     [ObservableProperty]
     private double timelinePosition;
@@ -89,6 +113,12 @@ public partial class MainPageViewModel : ObservableObject
 
     [ObservableProperty]
     private string updateBannerMessage = string.Empty;
+
+    [ObservableProperty]
+    private double netaThumbnailWidth = NetaThumbnailMetrics.Width(AppSettings.NetaThumbnailScale);
+
+    [ObservableProperty]
+    private double netaThumbnailHeight = NetaThumbnailMetrics.Height(AppSettings.NetaThumbnailScale);
 
     public Visibility UpdateBannerVisibility =>
         UpdateBannerVisible ? Visibility.Visible : Visibility.Collapsed;
@@ -126,6 +156,7 @@ public partial class MainPageViewModel : ObservableObject
         _previewSeekTimer.Tick += (_, _) => FlushPendingPreviewSeek();
 
         NetaItems.CollectionChanged += (_, _) => PersistNetaList();
+        RefreshPenThicknessPresets();
     }
 
     public void BeginTimelineSeek()
@@ -683,7 +714,7 @@ public partial class MainPageViewModel : ObservableObject
     private void SelectPenRed()
     {
         SetPenSelection(red: true);
-        UpdatePenThicknessLabel();
+        ApplyActivePenThickness();
         PenChanged?.Invoke(AppSettings.PenRed, AppSettings.PenThickness, false);
     }
 
@@ -691,7 +722,7 @@ public partial class MainPageViewModel : ObservableObject
     private void SelectPenGreen()
     {
         SetPenSelection(green: true);
-        UpdatePenThicknessLabel();
+        ApplyActivePenThickness();
         PenChanged?.Invoke(AppSettings.PenGreen, AppSettings.PenThickness, false);
     }
 
@@ -699,7 +730,7 @@ public partial class MainPageViewModel : ObservableObject
     private void SelectPenBlue()
     {
         SetPenSelection(blue: true);
-        UpdatePenThicknessLabel();
+        ApplyActivePenThickness();
         PenChanged?.Invoke(AppSettings.PenBlue, AppSettings.PenThickness, false);
     }
 
@@ -707,12 +738,30 @@ public partial class MainPageViewModel : ObservableObject
     private void SelectPenEraser()
     {
         SetPenSelection(eraser: true);
-        UpdatePenThicknessLabel();
+        UpdateEraserThicknessLabel();
         PenChanged?.Invoke(Color.FromArgb(255, 148, 163, 184), AppSettings.EraserThickness, true);
+    }
+
+    [RelayCommand]
+    private void SelectPenThicknessPreset1() => SelectPenThicknessPreset(0);
+
+    [RelayCommand]
+    private void SelectPenThicknessPreset2() => SelectPenThicknessPreset(1);
+
+    [RelayCommand]
+    private void SelectPenThicknessPreset3() => SelectPenThicknessPreset(2);
+
+    private void SelectPenThicknessPreset(int index)
+    {
+        AppSettings.SetPenThicknessPresetIndex(index);
+        SyncPenThicknessPresetSelection();
+        if (!IsPenEraser)
+            ApplyActivePenThickness();
     }
 
     public void ReapplyActivePen()
     {
+        RefreshPenThicknessPresets();
         if (IsPenRed)
             SelectPenRed();
         else if (IsPenGreen)
@@ -721,33 +770,60 @@ public partial class MainPageViewModel : ObservableObject
             SelectPenBlue();
         else if (IsPenEraser)
             SelectPenEraser();
-        else
-            UpdatePenThicknessLabel();
     }
 
-    private void UpdatePenThicknessLabel()
+    public void RefreshPenThicknessPresets()
     {
-        PenThicknessLabel = IsPenEraser
-            ? $"消 {AppSettings.EraserThickness:0}"
-            : $"太さ {AppSettings.PenThickness:0}";
+        PenThicknessPreset1Label = FormatPenThicknessPresetLabel(0);
+        PenThicknessPreset2Label = FormatPenThicknessPresetLabel(1);
+        PenThicknessPreset3Label = FormatPenThicknessPresetLabel(2);
+        SyncPenThicknessPresetSelection();
+        UpdateEraserThicknessLabel();
+        OnPropertyChanged(nameof(PenThicknessPresetVisibility));
+        OnPropertyChanged(nameof(EraserThicknessLabelVisibility));
     }
 
-    [RelayCommand]
-    private void DecreasePenThickness() => AdjustActiveThickness(-1);
+    private static string FormatPenThicknessPresetLabel(int index) =>
+        $"{AppSettings.GetPenThicknessPreset(index):0}";
 
-    [RelayCommand]
-    private void IncreasePenThickness() => AdjustActiveThickness(1);
-
-    private void AdjustActiveThickness(double delta)
+    private void SyncPenThicknessPresetSelection()
     {
-        if (IsPenEraser)
-            AppSettings.SetEraserThickness(AppSettings.EraserThickness + delta);
-        else
-            AppSettings.SetPenThickness(AppSettings.PenThickness + delta);
-
-        UpdatePenThicknessLabel();
-        ReapplyActivePen();
+        var index = AppSettings.PenThicknessPresetIndex;
+        IsPenThicknessPreset1 = index == 0;
+        IsPenThicknessPreset2 = index == 1;
+        IsPenThicknessPreset3 = index == 2;
     }
+
+    private void ApplyActivePenThickness()
+    {
+        UpdateEraserThicknessLabel();
+        OnPropertyChanged(nameof(PenThicknessPresetVisibility));
+        OnPropertyChanged(nameof(EraserThicknessLabelVisibility));
+
+        if (IsPenRed)
+            PenChanged?.Invoke(AppSettings.PenRed, AppSettings.PenThickness, false);
+        else if (IsPenGreen)
+            PenChanged?.Invoke(AppSettings.PenGreen, AppSettings.PenThickness, false);
+        else if (IsPenBlue)
+            PenChanged?.Invoke(AppSettings.PenBlue, AppSettings.PenThickness, false);
+    }
+
+    private void UpdateEraserThicknessLabel() =>
+        EraserThicknessLabel = $"消 {AppSettings.EraserThickness:0}";
+
+    partial void OnIsPenEraserChanged(bool value)
+    {
+        OnPropertyChanged(nameof(PenThicknessPresetVisibility));
+        OnPropertyChanged(nameof(EraserThicknessLabelVisibility));
+    }
+
+    public void RefreshNetaThumbnailMetrics()
+    {
+        NetaThumbnailWidth = NetaThumbnailMetrics.Width(AppSettings.NetaThumbnailScale);
+        NetaThumbnailHeight = NetaThumbnailMetrics.Height(AppSettings.NetaThumbnailScale);
+    }
+
+    public void RefreshPlaybackChrome() => UpdatePlaybackLabels();
 
     [RelayCommand]
     private void ToggleEditMode()
@@ -1243,11 +1319,15 @@ public partial class MainPageViewModel : ObservableObject
             _timelineTimer.Stop();
 
         RefreshTimeline();
-        RateLabel = Math.Abs(_session.ClockRate - 1.0) < 0.001
-            ? "等速（音声ON）"
-            : $"{_session.ClockRate:0.##}x（音声ミュート）";
-
         var rate = _session.ClockRate;
+        var isNormalRate = Math.Abs(rate - 1.0) < 0.001;
+        var audioOn = _session.IsPlaying
+            && (isNormalRate || AppSettings.VariableSpeedAudioEnabled);
+        var audioLabel = audioOn ? "音声ON" : "音声ミュート";
+        RateLabel = isNormalRate
+            ? $"等速（{audioLabel}）"
+            : $"{rate:0.##}x（{audioLabel}）";
+
         SetRateSelection(
             normal: Math.Abs(rate - 1.0) < 0.001,
             half: Math.Abs(rate - 0.5) < 0.001,

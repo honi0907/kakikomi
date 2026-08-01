@@ -25,15 +25,36 @@ public static class AppSettings
     public static Color PenRed { get; private set; } = DefaultPenRed;
     public static Color PenGreen { get; private set; } = DefaultPenGreen;
     public static Color PenBlue { get; private set; } = DefaultPenBlue;
-    public static double PenThickness { get; private set; } = 8;
+
+    private static readonly double[] DefaultPenThicknessPresets = [8, 16, 24];
+    private static readonly double[] PenThicknessPresets = (double[])DefaultPenThicknessPresets.Clone();
+    private static int _penThicknessPresetIndex;
+
+    /// <summary>現在選択中のペン太さ（プリセットから取得）。</summary>
+    public static double PenThickness => PenThicknessPresets[_penThicknessPresetIndex];
+
+    public static int PenThicknessPresetIndex => _penThicknessPresetIndex;
+
+    /// <summary>ON: 操作パネルのボタン＋シークバーを映像の上（ボタン→シークバー→映像）。OFF（既定）: 映像の下。</summary>
+    public static bool ControlPanelChromeAtTop { get; private set; }
+
     public static double EraserThickness { get; private set; } = 28;
     public static bool LaunchControlPanelFullSize { get; private set; }
+
+    /// <summary>ネタ一覧サムネイル倍率（1.0 / 1.2 / 1.5）。</summary>
+    public static double NetaThumbnailScale { get; private set; } = 1.0;
+
+    /// <summary>ON: ネタ切替時に短いクロスフェード。操作画面・クリーン出力の両方。</summary>
+    public static bool NetaSwitchCrossfadeEnabled { get; private set; }
 
     /// <summary>
     /// ON: 別ネタへ行って戻ると、前回止めた位置から再開。
     /// OFF（既定）: 戻るたびに先頭から。
     /// </summary>
     public static bool ResumePlayback { get; private set; }
+
+    /// <summary>ON: 0.25x / 0.5x / 2x 再生中も音声を出す（ピッチも速度に連動）。OFF（既定）: 等速のみ音声 ON。</summary>
+    public static bool VariableSpeedAudioEnabled { get; private set; }
 
     /// <summary>
     /// ON（既定）: コンパネ映像右上に大きめの再生/停止オーバーレイを表示。
@@ -67,8 +88,8 @@ public static class AppSettings
     /// <summary>遠隔接続用 PIN（空なら認証なし）。</summary>
     public static string RemoteControlPin { get; private set; } = "kakikomi";
 
-    /// <summary>既定 ON。解除パスワードで OFF にできる。</summary>
-    public static bool DemoMode { get; private set; } = true;
+    /// <summary>既定 OFF。設定で ON にできる（解除パスワードで OFF に戻す）。</summary>
+    public static bool DemoMode { get; private set; } = false;
 
     private static string StorePath =>
         Path.Combine(
@@ -101,14 +122,32 @@ public static class AppSettings
             if (TryParseColorHex(dto.PenBlue, out var blue))
                 PenBlue = Unpack(blue);
 
-            if (dto.PenThickness is { } penT)
-                PenThickness = Math.Clamp(penT, 1, 40);
+            if (dto.PenThicknessPresets is { Length: >= 3 } presetValues)
+            {
+                for (var i = 0; i < 3; i++)
+                    PenThicknessPresets[i] = ClampPenThickness(presetValues[i]);
+            }
+            else if (dto.PenThickness is { } legacyPenT)
+            {
+                PenThicknessPresets[0] = ClampPenThickness(legacyPenT);
+            }
+
+            if (dto.PenThicknessPresetIndex is { } presetIndex)
+                _penThicknessPresetIndex = Math.Clamp(presetIndex, 0, 2);
+            if (dto.ControlPanelChromeAtTop is { } chromeAtTop)
+                ControlPanelChromeAtTop = chromeAtTop;
             if (dto.EraserThickness is { } eraserT)
                 EraserThickness = Math.Clamp(eraserT, 4, 80);
             if (dto.LaunchControlPanelFullSize is { } full)
                 LaunchControlPanelFullSize = full;
+            if (dto.NetaThumbnailScale is { } thumbScale)
+                NetaThumbnailScale = NetaThumbnailMetrics.NormalizeScale(thumbScale);
+            if (dto.NetaSwitchCrossfadeEnabled is { } crossfade)
+                NetaSwitchCrossfadeEnabled = crossfade;
             if (dto.ResumePlayback is { } resume)
                 ResumePlayback = resume;
+            if (dto.VariableSpeedAudioEnabled is { } variableSpeedAudio)
+                VariableSpeedAudioEnabled = variableSpeedAudio;
             if (dto.OverlayPlayButton is { } overlayPlay)
                 OverlayPlayButton = overlayPlay;
             if (dto.PerfMonitorEnabled is { } perfMon)
@@ -165,9 +204,42 @@ public static class AppSettings
         Changed?.Invoke();
     }
 
-    public static void SetPenThickness(double thickness)
+    public static double GetPenThicknessPreset(int index) =>
+        PenThicknessPresets[Math.Clamp(index, 0, 2)];
+
+    public static void SetPenThicknessPreset(int index, double thickness)
     {
-        PenThickness = Math.Clamp(thickness, 1, 40);
+        index = Math.Clamp(index, 0, 2);
+        PenThicknessPresets[index] = ClampPenThickness(thickness);
+        Persist();
+        Changed?.Invoke();
+    }
+
+    public static void SetPenThicknessPresetIndex(int index)
+    {
+        index = Math.Clamp(index, 0, 2);
+        if (_penThicknessPresetIndex == index)
+            return;
+
+        _penThicknessPresetIndex = index;
+        Persist();
+        Changed?.Invoke();
+    }
+
+    public static void ResetPenThicknessPresetsToDefault()
+    {
+        Array.Copy(DefaultPenThicknessPresets, PenThicknessPresets, 3);
+        _penThicknessPresetIndex = 0;
+        Persist();
+        Changed?.Invoke();
+    }
+
+    private static double ClampPenThickness(double thickness) =>
+        Math.Clamp(thickness, 1, 40);
+
+    public static void SetControlPanelChromeAtTop(bool atTop)
+    {
+        ControlPanelChromeAtTop = atTop;
         Persist();
         Changed?.Invoke();
     }
@@ -186,9 +258,30 @@ public static class AppSettings
         Changed?.Invoke();
     }
 
+    public static void SetNetaThumbnailScale(double scale)
+    {
+        NetaThumbnailScale = NetaThumbnailMetrics.NormalizeScale(scale);
+        Persist();
+        Changed?.Invoke();
+    }
+
+    public static void SetNetaSwitchCrossfadeEnabled(bool enabled)
+    {
+        NetaSwitchCrossfadeEnabled = enabled;
+        Persist();
+        Changed?.Invoke();
+    }
+
     public static void SetResumePlayback(bool enabled)
     {
         ResumePlayback = enabled;
+        Persist();
+        Changed?.Invoke();
+    }
+
+    public static void SetVariableSpeedAudioEnabled(bool enabled)
+    {
+        VariableSpeedAudioEnabled = enabled;
         Persist();
         Changed?.Invoke();
     }
@@ -279,9 +372,15 @@ public static class AppSettings
                 PenGreen = ToHex(PenGreen),
                 PenBlue = ToHex(PenBlue),
                 PenThickness = PenThickness,
+                PenThicknessPresets = PenThicknessPresets.ToArray(),
+                PenThicknessPresetIndex = _penThicknessPresetIndex,
+                ControlPanelChromeAtTop = ControlPanelChromeAtTop,
                 EraserThickness = EraserThickness,
                 LaunchControlPanelFullSize = LaunchControlPanelFullSize,
+                NetaThumbnailScale = NetaThumbnailScale,
+                NetaSwitchCrossfadeEnabled = NetaSwitchCrossfadeEnabled,
                 ResumePlayback = ResumePlayback,
+                VariableSpeedAudioEnabled = VariableSpeedAudioEnabled,
                 OverlayPlayButton = OverlayPlayButton,
                 PerfMonitorEnabled = PerfMonitorEnabled,
                 PerfLogEnabled = PerfLogEnabled,
@@ -333,9 +432,15 @@ public static class AppSettings
         public string? PenGreen { get; set; }
         public string? PenBlue { get; set; }
         public double? PenThickness { get; set; }
+        public double[]? PenThicknessPresets { get; set; }
+        public int? PenThicknessPresetIndex { get; set; }
+        public bool? ControlPanelChromeAtTop { get; set; }
         public double? EraserThickness { get; set; }
         public bool? LaunchControlPanelFullSize { get; set; }
+        public double? NetaThumbnailScale { get; set; }
+        public bool? NetaSwitchCrossfadeEnabled { get; set; }
         public bool? ResumePlayback { get; set; }
+        public bool? VariableSpeedAudioEnabled { get; set; }
         public bool? OverlayPlayButton { get; set; }
         public bool? PerfMonitorEnabled { get; set; }
         public bool? PerfLogEnabled { get; set; }
