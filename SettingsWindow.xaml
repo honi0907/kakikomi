@@ -344,6 +344,46 @@
                         Margin="0,12,0,0"
                         Foreground="#FF94A3B8"
                         TextWrapping="Wrap"
+                        Text="2倍速の映像表示の上限 fps です。高いほどなめらかですが負荷が上がり、黒のちらつきが出る場合は下げてください。既定は 60 fps です。" />
+                    <StackPanel Spacing="8">
+                        <TextBlock Foreground="#FFE2E8F0" Text="2倍速の表示 fps" />
+                        <StackPanel Spacing="6">
+                            <RadioButton
+                                x:Name="FastPlaybackFpsUnlimitedRadio"
+                                Content="制限なし"
+                                Foreground="#FFE2E8F0"
+                                GroupName="FastPlaybackMaxFps" />
+                            <RadioButton
+                                x:Name="FastPlaybackFps60Radio"
+                                Content="60 fps（既定）"
+                                Foreground="#FFE2E8F0"
+                                GroupName="FastPlaybackMaxFps" />
+                            <RadioButton
+                                x:Name="FastPlaybackFps50Radio"
+                                Content="50 fps"
+                                Foreground="#FFE2E8F0"
+                                GroupName="FastPlaybackMaxFps" />
+                            <RadioButton
+                                x:Name="FastPlaybackFps45Radio"
+                                Content="45 fps"
+                                Foreground="#FFE2E8F0"
+                                GroupName="FastPlaybackMaxFps" />
+                            <RadioButton
+                                x:Name="FastPlaybackFps30Radio"
+                                Content="30 fps"
+                                Foreground="#FFE2E8F0"
+                                GroupName="FastPlaybackMaxFps" />
+                            <RadioButton
+                                x:Name="FastPlaybackFps24Radio"
+                                Content="24 fps"
+                                Foreground="#FFE2E8F0"
+                                GroupName="FastPlaybackMaxFps" />
+                        </StackPanel>
+                    </StackPanel>
+                    <TextBlock
+                        Margin="0,12,0,0"
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
                         Text="ウィンドウ右上に、指で叩きやすい大きめの再生/停止ボタンを重ねます。下バーの再生/停止と同じ動作です。" />
                     <CheckBox
                         x:Name="OverlayPlayButtonCheck"

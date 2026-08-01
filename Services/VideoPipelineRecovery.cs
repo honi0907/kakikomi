@@ -53,7 +53,8 @@ internal static class VideoPipelineRecovery
             return;
 
         var now = Environment.TickCount64;
-        if (now - last < NoFrameMsBeforeLevel2)
+        var noFrameMs = engine.ClockRate > 1.5 ? 8_000 : NoFrameMsBeforeLevel2;
+        if (now - last < noFrameMs)
             return;
 
         RequestRecover(engine.OperatorPlayer, level: 2, "no-frames-while-playing");
@@ -145,15 +146,20 @@ internal static class VideoPipelineRecovery
 
     private static async Task Level2Async(MediaPlayer player)
     {
-        try
+        var fastPlayback = (App.Engine?.ClockRate ?? 1.0) > 1.5;
+
+        if (!fastPlayback)
         {
-            player.IsVideoFrameServerEnabled = false;
-            await Task.Delay(80).ConfigureAwait(true);
-            player.IsVideoFrameServerEnabled = true;
-        }
-        catch (Exception ex)
-        {
-            PerfMonitorService.Instance.LogEvent("WARN", $"VideoPipeline frame-server toggle: {FormatEx(ex)}");
+            try
+            {
+                player.IsVideoFrameServerEnabled = false;
+                await Task.Delay(80).ConfigureAwait(true);
+                player.IsVideoFrameServerEnabled = true;
+            }
+            catch (Exception ex)
+            {
+                PerfMonitorService.Instance.LogEvent("WARN", $"VideoPipeline frame-server toggle: {FormatEx(ex)}");
+            }
         }
 
         CompositionVideoHostRegistry.ForceRebindAll();

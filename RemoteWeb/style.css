@@ -164,6 +164,19 @@ input[type="text"] {
   background: #b45309;
 }
 
+.btn-restart {
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 10px;
+  background: #7f1d1d;
+  border: 1px solid #b91c1c;
+  font-size: 14px;
+}
+
+.btn-restart:hover {
+  background: #991b1b;
+}
+
 .folder-line {
   font-size: 11px;
   line-height: 1.35;

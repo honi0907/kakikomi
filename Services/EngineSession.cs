@@ -696,6 +696,7 @@ public sealed class EngineSession : IDisposable
             rate = 1.0;
 
         ClockRate = rate;
+
         foreach (var pair in _displayPairs)
         {
             if (_scrubPreviewActive && ReferenceEquals(pair, _displayPairs[_visibleSlotIndex]))

@@ -36,6 +36,7 @@ internal static class MediaFramePump
         private int _height;
         private bool _hooked;
         private int _busy;
+        private int _recheckPending;
         private int _consecutiveFailures;
         private long _lastRecoverLogMs;
 
@@ -103,68 +104,76 @@ internal static class MediaFramePump
 
         private void OnVideoFrameAvailable(MediaPlayer sender, object args)
         {
-            if (Interlocked.Exchange(ref _busy, 1) == 1)
-                return;
-
-            try
+            while (true)
             {
-                Action<CanvasRenderTarget, int, int>[] sinks;
-                CanvasRenderTarget readable;
-                int width;
-                int height;
-
-                lock (_gate)
+                if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0)
                 {
-                    if (_sinks.Count == 0)
-                        return;
-
-                    width = (int)sender.PlaybackSession.NaturalVideoWidth;
-                    height = (int)sender.PlaybackSession.NaturalVideoHeight;
-                    if (width <= 0 || height <= 0)
-                    {
-                        width = 1920;
-                        height = 1080;
-                    }
-
-                    if (!EnsureBuffers_NoLock(width, height))
-                    {
-                        NoteFailure_NoLock(sender, "buffers");
-                        return;
-                    }
-
-                    var write = _writeA ? _bufferA! : _bufferB!;
-                    sender.CopyFrameToVideoSurface(write);
-                    _writeA = !_writeA;
-                    readable = _writeA ? _bufferB! : _bufferA!;
-                    sinks = _sinks.ToArray();
-                    _consecutiveFailures = 0;
+                    Interlocked.Exchange(ref _recheckPending, 1);
+                    return;
                 }
 
-                // 本番表示を最優先
-                foreach (var sink in sinks)
+                try
                 {
-                    try
+                    Action<CanvasRenderTarget, int, int>[] sinks;
+                    CanvasRenderTarget readable;
+                    int width;
+                    int height;
+
+                    lock (_gate)
                     {
-                        sink(readable, width, height);
+                        if (_sinks.Count == 0)
+                            return;
+
+                        width = (int)sender.PlaybackSession.NaturalVideoWidth;
+                        height = (int)sender.PlaybackSession.NaturalVideoHeight;
+                        if (width <= 0 || height <= 0)
+                        {
+                            width = 1920;
+                            height = 1080;
+                        }
+
+                        if (!EnsureBuffers_NoLock(width, height))
+                        {
+                            NoteFailure_NoLock(sender, "buffers");
+                            return;
+                        }
+
+                        var write = _writeA ? _bufferA! : _bufferB!;
+                        sender.CopyFrameToVideoSurface(write);
+                        _writeA = !_writeA;
+                        readable = _writeA ? _bufferB! : _bufferA!;
+                        sinks = _sinks.ToArray();
+                        _consecutiveFailures = 0;
                     }
-                    catch (Exception ex)
+
+                    foreach (var sink in sinks)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[MediaFramePump] sink: {ex.Message}");
+                        try
+                        {
+                            sink(readable, width, height);
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[MediaFramePump] sink: {ex.Message}");
+                        }
                     }
+
+                    VideoFrameRelay.Publish(sender, readable, width, height);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[MediaFramePump] copy: {ex.Message}");
+                    lock (_gate)
+                        NoteFailure_NoLock(sender, $"copy: {ex.Message}", ex);
+                    return;
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref _busy, 0);
                 }
 
-                // 遠隔プレビューは購読ではなくリレー参照（Copy は増やさない）
-                VideoFrameRelay.Publish(sender, readable, width, height);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[MediaFramePump] copy: {ex.Message}");
-                lock (_gate)
-                    NoteFailure_NoLock(sender, $"copy: {ex.Message}", ex);
-            }
-            finally
-            {
-                Interlocked.Exchange(ref _busy, 0);
+                if (Interlocked.Exchange(ref _recheckPending, 0) == 0)
+                    break;
             }
         }
 

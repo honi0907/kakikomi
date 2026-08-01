@@ -242,6 +242,13 @@ public sealed partial class SettingsWindow : Window
             AppSettings.SetVariableSpeedAudioEnabled(VariableSpeedAudioCheck.IsChecked == true);
         };
 
+        FastPlaybackFpsUnlimitedRadio.Checked += (_, _) => OnFastPlaybackMaxFpsChecked(0);
+        FastPlaybackFps60Radio.Checked += (_, _) => OnFastPlaybackMaxFpsChecked(60);
+        FastPlaybackFps50Radio.Checked += (_, _) => OnFastPlaybackMaxFpsChecked(50);
+        FastPlaybackFps45Radio.Checked += (_, _) => OnFastPlaybackMaxFpsChecked(45);
+        FastPlaybackFps30Radio.Checked += (_, _) => OnFastPlaybackMaxFpsChecked(30);
+        FastPlaybackFps24Radio.Checked += (_, _) => OnFastPlaybackMaxFpsChecked(24);
+
         NetaSwitchCrossfadeCheck.Click += (_, _) =>
         {
             if (_loadingUi)
@@ -564,6 +571,7 @@ public sealed partial class SettingsWindow : Window
             ControlPanelChromeAtTopCheck.IsChecked = AppSettings.ControlPanelChromeAtTop;
             ResumePlaybackCheck.IsChecked = AppSettings.ResumePlayback;
             VariableSpeedAudioCheck.IsChecked = AppSettings.VariableSpeedAudioEnabled;
+            ApplyFastPlaybackMaxFpsUi();
             NetaSwitchCrossfadeCheck.IsChecked = AppSettings.NetaSwitchCrossfadeEnabled;
             OverlayPlayButtonCheck.IsChecked = AppSettings.OverlayPlayButton;
             NetaLoopCheck.IsChecked = RemoteNetaLoopService.Instance.IsRunning;
@@ -589,6 +597,25 @@ public sealed partial class SettingsWindow : Window
         PenPreset1Box.Value = AppSettings.GetPenThicknessPreset(0);
         PenPreset2Box.Value = AppSettings.GetPenThicknessPreset(1);
         PenPreset3Box.Value = AppSettings.GetPenThicknessPreset(2);
+    }
+
+    private void OnFastPlaybackMaxFpsChecked(int fps)
+    {
+        if (_loadingUi)
+            return;
+
+        AppSettings.SetFastPlaybackMaxFps(fps);
+    }
+
+    private void ApplyFastPlaybackMaxFpsUi()
+    {
+        var fps = AppSettings.FastPlaybackMaxFps;
+        FastPlaybackFpsUnlimitedRadio.IsChecked = fps == 0;
+        FastPlaybackFps60Radio.IsChecked = fps == 60;
+        FastPlaybackFps50Radio.IsChecked = fps == 50;
+        FastPlaybackFps45Radio.IsChecked = fps == 45;
+        FastPlaybackFps30Radio.IsChecked = fps == 30;
+        FastPlaybackFps24Radio.IsChecked = fps == 24;
     }
 
     private void OnNetaThumbnailScaleChecked(double scale)

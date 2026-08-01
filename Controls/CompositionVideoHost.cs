@@ -4,6 +4,7 @@ using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Windows.Foundation;
 using Windows.Media.Playback;
 using Windows.UI;
 using Kakikomi.Services;
@@ -12,8 +13,7 @@ namespace Kakikomi.Controls;
 
 /// <summary>
 /// MediaPlayer Frame Server 映像を Image に描画する。
-/// Copy は <see cref="MediaFramePump"/> が1回だけ行い、ここは描画のみ。
-/// 描画失敗時は ImageSource を破棄して次フレームで再生成する。
+/// Pump の共有バッファはホスト専用へ再コピーし、単一の ImageSource へ上書き描画する。
 /// </summary>
 public sealed class CompositionVideoHost : Grid
 {
@@ -22,15 +22,17 @@ public sealed class CompositionVideoHost : Grid
 
     private MediaPlayer? _player;
     private IDisposable? _subscription;
-    private CanvasImageSource? _imageSource;
+    private CanvasImageSource? _page;
     private int _surfaceWidth;
     private int _surfaceHeight;
     private int _drawQueued;
+    private int _pendingRevision;
     private CanvasRenderTarget? _pendingTarget;
     private int _pendingWidth;
     private int _pendingHeight;
     private int _drawFailures;
     private bool _skipVisibilityReset;
+    private long _lastPresentMs;
 
     public CompositionVideoHost()
     {
@@ -89,12 +91,11 @@ public sealed class CompositionVideoHost : Grid
                 if (!EnsurePendingTarget_NoLock(width, height) || _pendingTarget is null)
                     return;
 
-                // Relay は Pump の共有バッファ参照。購読解除後は破棄済みになり得るので必ずコピーする。
                 using var session = _pendingTarget.CreateDrawingSession();
-                session.Clear(Color.FromArgb(255, 0, 0, 0));
                 session.DrawImage(target);
             }
 
+            Interlocked.Increment(ref _pendingRevision);
             QueueDraw();
         }
         catch (Exception ex)
@@ -105,7 +106,7 @@ public sealed class CompositionVideoHost : Grid
         }
     }
 
-    /// <summary>購読を強制張り直し（映像経路復帰用）。</summary>
+    /// <summary>購読を強制張り直し（映像経路復帰用）。表示中フレームは維持する。</summary>
     public void ForceRebind()
     {
         var player = _player;
@@ -113,7 +114,6 @@ public sealed class CompositionVideoHost : Grid
             return;
 
         DetachSubscription();
-        ResetImageSource();
         player.IsVideoFrameServerEnabled = true;
         _subscription = MediaFramePump.Subscribe(player, OnFrameCopied);
         _drawFailures = 0;
@@ -140,10 +140,8 @@ public sealed class CompositionVideoHost : Grid
         _subscription = null;
     }
 
-    /// <summary>クロスフェード用。Grid ではなく映像 Image だけの不透明度。</summary>
     internal void SetVideoOpacity(double opacity) => _image.Opacity = opacity;
 
-    /// <summary>クロスフェード開始: 古い ImageSource を残したまま表示し、映像だけ透明にする。</summary>
     internal void BeginIncomingCrossfade()
     {
         _skipVisibilityReset = true;
@@ -160,7 +158,6 @@ public sealed class CompositionVideoHost : Grid
         }
     }
 
-    /// <summary>クロスフェード終了後に非表示へ。</summary>
     internal void FinishOutgoingCrossfade()
     {
         Opacity = 1;
@@ -169,7 +166,6 @@ public sealed class CompositionVideoHost : Grid
         ResetImageSource();
     }
 
-    /// <summary>即時切替後の状態を整える。</summary>
     internal void FinishIncomingInstant()
     {
         Opacity = 1;
@@ -202,10 +198,7 @@ public sealed class CompositionVideoHost : Grid
         }
     }
 
-    internal void HideInstant()
-    {
-        FinishOutgoingInstant();
-    }
+    internal void HideInstant() => FinishOutgoingInstant();
 
     private void OnVisibilityChanged(DependencyObject sender, DependencyProperty dp)
     {
@@ -214,14 +207,11 @@ public sealed class CompositionVideoHost : Grid
 
         if (Visibility == Visibility.Visible)
         {
-            // 非表示中に溜まった古い ImageSource を捨て、最新の pending を描く。
-            ResetImageSource();
             DrawPending();
             SetVideoOpacity(1);
             return;
         }
 
-        // 非表示にしたら前ネタの静止画を残さない。
         ResetImageSource();
         SetVideoOpacity(1);
     }
@@ -231,9 +221,10 @@ public sealed class CompositionVideoHost : Grid
         lock (_drawLock)
         {
             _image.Source = null;
-            DisposeImageSource_NoLock();
+            _page = null;
             _surfaceWidth = 0;
             _surfaceHeight = 0;
+            _lastPresentMs = 0;
         }
     }
 
@@ -295,11 +286,6 @@ public sealed class CompositionVideoHost : Grid
         }
     }
 
-    private void DisposeImageSource_NoLock()
-    {
-        _imageSource = null;
-    }
-
     private void OnFrameCopied(CanvasRenderTarget target, int width, int height)
     {
         try
@@ -309,9 +295,7 @@ public sealed class CompositionVideoHost : Grid
                 if (!EnsurePendingTarget_NoLock(width, height) || _pendingTarget is null)
                     return;
 
-                // MediaFramePump の共有バッファは次フレームで上書きされる。2倍速などで UI 描画が遅れると黒チラつきの原因になる。
                 using var session = _pendingTarget.CreateDrawingSession();
-                session.Clear(Color.FromArgb(255, 0, 0, 0));
                 session.DrawImage(target);
             }
         }
@@ -320,6 +304,7 @@ public sealed class CompositionVideoHost : Grid
             System.Diagnostics.Debug.WriteLine($"[CompositionVideoHost] frame copy: {ex.Message}");
         }
 
+        Interlocked.Increment(ref _pendingRevision);
         QueueDraw();
     }
 
@@ -335,26 +320,43 @@ public sealed class CompositionVideoHost : Grid
             return;
         }
 
-        if (dq.HasThreadAccess)
-        {
+        if (!dq.TryEnqueue(DrawPendingLoop))
             Interlocked.Exchange(ref _drawQueued, 0);
-            DrawPending();
-            return;
-        }
+    }
 
-        if (!dq.TryEnqueue(() =>
+    private void DrawPendingLoop()
+    {
+        var lastDrawn = -1;
+        try
+        {
+            while (true)
             {
-                Interlocked.Exchange(ref _drawQueued, 0);
+                var current = Volatile.Read(ref _pendingRevision);
+                if (current == lastDrawn)
+                    break;
+
                 DrawPending();
-            }))
+                lastDrawn = current;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[CompositionVideoHost] draw loop: {ex.Message}");
+        }
+        finally
         {
             Interlocked.Exchange(ref _drawQueued, 0);
+            if (Volatile.Read(ref _pendingRevision) != lastDrawn)
+                QueueDraw();
         }
     }
 
     private void DrawPending()
     {
         if (Visibility != Visibility.Visible)
+            return;
+
+        if (ShouldThrottlePresent())
             return;
 
         CanvasRenderTarget? target;
@@ -373,13 +375,15 @@ public sealed class CompositionVideoHost : Grid
 
         try
         {
-            EnsureImageSource(width, height);
-            if (_imageSource is null)
+            var page = EnsurePage(width, height);
+            if (page is null)
                 return;
 
-            // Copy 済みターゲットをそのまま描く（再 Copy しない）
-            using var session = _imageSource.CreateDrawingSession(Color.FromArgb(255, 0, 0, 0));
-            session.DrawImage(target);
+            var dest = new Rect(0, 0, width, height);
+            using (var session = page.CreateDrawingSession(Color.FromArgb(255, 0, 0, 0)))
+                session.DrawImage(target, dest, dest);
+
+            _lastPresentMs = Environment.TickCount64;
             _drawFailures = 0;
             VideoPipelineRecovery.NotifyFrameDelivered();
         }
@@ -387,22 +391,32 @@ public sealed class CompositionVideoHost : Grid
         {
             System.Diagnostics.Debug.WriteLine($"[CompositionVideoHost] draw: {ex.Message}");
             _drawFailures++;
-            ResetImageSource();
 
             if (_drawFailures >= 3)
             {
                 _drawFailures = 0;
                 VideoPipelineRecovery.NotifyDrawFailure(ex.Message);
-
                 ForceRebind();
             }
         }
     }
 
-    private void EnsureImageSource(int width, int height)
+    private bool ShouldThrottlePresent()
     {
-        if (_imageSource is not null && _surfaceWidth == width && _surfaceHeight == height)
-            return;
+        if ((App.Engine?.ClockRate ?? 1.0) <= 1.5)
+            return false;
+
+        var intervalMs = AppSettings.GetFastPlaybackPresentIntervalMs();
+        if (intervalMs <= 0)
+            return false;
+
+        return Environment.TickCount64 - _lastPresentMs < intervalMs;
+    }
+
+    private CanvasImageSource? EnsurePage(int width, int height)
+    {
+        if (_page is not null && _surfaceWidth == width && _surfaceHeight == height)
+            return _page;
 
         _surfaceWidth = width;
         _surfaceHeight = height;
@@ -412,28 +426,30 @@ public sealed class CompositionVideoHost : Grid
             var device = CanvasDevice.GetSharedDevice();
             if (device.IsDeviceLost())
                 device = new CanvasDevice();
-            DisposeImageSource_NoLock();
-            _imageSource = new CanvasImageSource(device, width, height, 96);
-            _image.Source = _imageSource;
+
+            _page = new CanvasImageSource(device, width, height, 96);
+            _image.Source = _page;
+            return _page;
         }
         catch (Exception ex)
         {
             try
             {
                 var device = new CanvasDevice();
-                DisposeImageSource_NoLock();
-                _imageSource = new CanvasImageSource(device, width, height, 96);
-                _image.Source = _imageSource;
+                _page = new CanvasImageSource(device, width, height, 96);
+                _image.Source = _page;
                 PerfMonitorService.Instance.LogEvent(
                     "WARN",
-                    $"CompositionVideoHost ImageSource recreated: {ex.Message}");
+                    $"CompositionVideoHost page recreated: {ex.Message}");
+                return _page;
             }
             catch (Exception ex2)
             {
-                _imageSource = null;
+                _page = null;
                 PerfMonitorService.Instance.LogEvent(
                     "WARN",
-                    $"CompositionVideoHost ImageSource failed: {ex.Message} / {ex2.Message}");
+                    $"CompositionVideoHost page failed: {ex.Message} / {ex2.Message}");
+                return null;
             }
         }
     }

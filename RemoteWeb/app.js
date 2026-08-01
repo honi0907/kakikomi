@@ -14,6 +14,7 @@
   const folderLine = document.getElementById("folderLine");
   const reloadNetasBtn = document.getElementById("reloadNetasBtn");
   const netaLoopBtn = document.getElementById("netaLoopBtn");
+  const restartAppBtn = document.getElementById("restartAppBtn");
   const timeText = document.getElementById("timeText");
   const seekBar = document.getElementById("seekBar");
   const preview = document.getElementById("preview");
@@ -195,6 +196,23 @@
       send("netaLoop", { enabled: false });
     } else {
       send("netaLoop", { enabled: true });
+    }
+  };
+
+  restartAppBtn.onclick = () => {
+    if (!confirm(
+      "Kakikomi を強制再起動します。\n" +
+      "通信は切断されます。よろしいですか？"
+    )) {
+      return;
+    }
+    send("restartApp");
+    authError.textContent = "再起動を送信しました…";
+    auth.classList.remove("hidden");
+    app.classList.add("hidden");
+    if (ws) {
+      try { ws.close(); } catch {}
+      ws = null;
     }
   };
 

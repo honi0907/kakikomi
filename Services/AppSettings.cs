@@ -56,6 +56,9 @@ public static class AppSettings
     /// <summary>ON: 0.25x / 0.5x / 2x 再生中も音声を出す（ピッチも速度に連動）。OFF（既定）: 等速のみ音声 ON。</summary>
     public static bool VariableSpeedAudioEnabled { get; private set; }
 
+    /// <summary>2倍速の画面更新上限 fps。0 = 制限なし。既定 45。</summary>
+    public static int FastPlaybackMaxFps { get; private set; } = 60;
+
     /// <summary>
     /// ON（既定）: コンパネ映像右上に大きめの再生/停止オーバーレイを表示。
     /// </summary>
@@ -148,6 +151,8 @@ public static class AppSettings
                 ResumePlayback = resume;
             if (dto.VariableSpeedAudioEnabled is { } variableSpeedAudio)
                 VariableSpeedAudioEnabled = variableSpeedAudio;
+            if (dto.FastPlaybackMaxFps is { } fastFps)
+                FastPlaybackMaxFps = NormalizeFastPlaybackMaxFps(fastFps);
             if (dto.OverlayPlayButton is { } overlayPlay)
                 OverlayPlayButton = overlayPlay;
             if (dto.PerfMonitorEnabled is { } perfMon)
@@ -286,6 +291,29 @@ public static class AppSettings
         Changed?.Invoke();
     }
 
+    public static void SetFastPlaybackMaxFps(int fps)
+    {
+        FastPlaybackMaxFps = NormalizeFastPlaybackMaxFps(fps);
+        Persist();
+        Changed?.Invoke();
+    }
+
+    /// <summary>2倍速の最小表示間隔（ms）。0 なら制限なし。</summary>
+    public static int GetFastPlaybackPresentIntervalMs() =>
+        FastPlaybackMaxFps <= 0 ? 0 : (int)Math.Round(1000.0 / FastPlaybackMaxFps);
+
+    public static int NormalizeFastPlaybackMaxFps(int fps) =>
+        fps switch
+        {
+            0 => 0,
+            24 => 24,
+            30 => 30,
+            45 => 45,
+            50 => 50,
+            60 => 60,
+            _ => 60
+        };
+
     public static void SetOverlayPlayButton(bool enabled)
     {
         OverlayPlayButton = enabled;
@@ -381,6 +409,7 @@ public static class AppSettings
                 NetaSwitchCrossfadeEnabled = NetaSwitchCrossfadeEnabled,
                 ResumePlayback = ResumePlayback,
                 VariableSpeedAudioEnabled = VariableSpeedAudioEnabled,
+                FastPlaybackMaxFps = FastPlaybackMaxFps,
                 OverlayPlayButton = OverlayPlayButton,
                 PerfMonitorEnabled = PerfMonitorEnabled,
                 PerfLogEnabled = PerfLogEnabled,
@@ -441,6 +470,7 @@ public static class AppSettings
         public bool? NetaSwitchCrossfadeEnabled { get; set; }
         public bool? ResumePlayback { get; set; }
         public bool? VariableSpeedAudioEnabled { get; set; }
+        public int? FastPlaybackMaxFps { get; set; }
         public bool? OverlayPlayButton { get; set; }
         public bool? PerfMonitorEnabled { get; set; }
         public bool? PerfLogEnabled { get; set; }

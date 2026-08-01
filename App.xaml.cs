@@ -134,6 +134,22 @@ public partial class App : Application
         try { Window.Close(); } catch { /* ignore */ }
     }
 
+    /// <summary>遠隔操作などからの強制再起動。通信切断を承知の最終手段。</summary>
+    public static void ScheduleRemoteRestart()
+    {
+        if (!AppRestartService.TryScheduleRestart(out var error))
+        {
+            System.Diagnostics.Debug.WriteLine($"[RemoteRestart] {error}");
+            if (MainViewModel is not null)
+                MainViewModel.StatusText = $"再起動失敗: {error}";
+            return;
+        }
+
+        PerfMonitorService.Instance.LogEvent("WARN", "Remote restart scheduled");
+        try { RemoteControlHost.Instance.Stop(); } catch { /* ignore */ }
+        RequestExit();
+    }
+
     public static void EnterControlPanelFullScreen()
     {
         try

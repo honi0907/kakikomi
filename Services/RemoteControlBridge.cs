@@ -145,6 +145,9 @@ internal static class RemoteControlBridge
                 else
                     RemoteNetaLoopService.Instance.Stop();
                 break;
+            case "restartApp":
+                App.ScheduleRemoteRestart();
+                break;
             case "refresh":
                 break;
         }
