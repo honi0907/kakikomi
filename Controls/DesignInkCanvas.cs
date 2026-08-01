@@ -84,10 +84,54 @@ public sealed class DesignInkCanvas : Canvas
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        // 書き込みは停止中のみ。描画中の追加指は無視（シングルタッチ）
-        if (!_inputEnabled || _session is null || _session.IsPlaying)
+        if (!_inputEnabled || _session is null)
             return;
         if (_drawing || _activePointerId is not null)
+            return;
+
+        if (_session.IsPlaying)
+        {
+            if (!AppSettings.TouchVideoPauseAndDraw)
+                return;
+
+            _session.Pause();
+            _session.RequestPausedFrameRefresh();
+            _activePointerId = e.Pointer.PointerId;
+            CapturePointer(e.Pointer);
+            e.Handled = true;
+            return;
+        }
+
+        BeginStrokeAt(e);
+        e.Handled = true;
+    }
+
+    private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (_session is null || _activePointerId != e.Pointer.PointerId)
+            return;
+
+        if (!_drawing)
+        {
+            if (_session.IsPlaying)
+                return;
+
+            BeginStrokeAt(e);
+            if (!_drawing)
+                return;
+        }
+
+        var point = Clamp(e.GetCurrentPoint(this).Position);
+        if (_isEraser)
+            _session.EraseNear(point, _thickness);
+        else
+            _session.AppendStrokePoint(point);
+        e.Handled = true;
+    }
+
+    private void BeginStrokeAt(PointerRoutedEventArgs e)
+    {
+        if (_session is null || _session.IsPlaying)
             return;
 
         _drawing = true;
@@ -98,35 +142,18 @@ public sealed class DesignInkCanvas : Canvas
             _session.EraseNear(point, _thickness);
         else
             _session.BeginStroke(_color, _thickness, point);
-        e.Handled = true;
-    }
-
-    private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
-    {
-        if (!_drawing || _session is null || _session.IsPlaying)
-            return;
-        if (_activePointerId != e.Pointer.PointerId)
-            return;
-
-        var point = Clamp(e.GetCurrentPoint(this).Position);
-        if (_isEraser)
-            _session.EraseNear(point, _thickness);
-        else
-            _session.AppendStrokePoint(point);
-        e.Handled = true;
     }
 
     private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
     {
-        if (!_drawing || _session is null)
-            return;
-        if (_activePointerId != e.Pointer.PointerId)
+        if (_session is null || _activePointerId != e.Pointer.PointerId)
             return;
 
+        var wasDrawing = _drawing;
         _drawing = false;
         _activePointerId = null;
         ReleasePointerCapture(e.Pointer);
-        if (!_isEraser)
+        if (wasDrawing && !_isEraser)
             _session.EndStroke();
         e.Handled = true;
     }

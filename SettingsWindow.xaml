@@ -384,6 +384,15 @@
                         Margin="0,12,0,0"
                         Foreground="#FF94A3B8"
                         TextWrapping="Wrap"
+                        Text="再生中にペンや指で映像に触れると一時停止し、そのまま書き込みできます。タップだけの場合は停止のみで点は残りません。既定は OFF です。" />
+                    <CheckBox
+                        x:Name="TouchVideoPauseAndDrawCheck"
+                        Content="再生中に映像へ触れて停止・描画"
+                        Foreground="#FFE2E8F0" />
+                    <TextBlock
+                        Margin="0,12,0,0"
+                        Foreground="#FF94A3B8"
+                        TextWrapping="Wrap"
                         Text="ウィンドウ右上に、指で叩きやすい大きめの再生/停止ボタンを重ねます。下バーの再生/停止と同じ動作です。" />
                     <CheckBox
                         x:Name="OverlayPlayButtonCheck"

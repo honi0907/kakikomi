@@ -263,6 +263,13 @@ public sealed partial class SettingsWindow : Window
             AppSettings.SetOverlayPlayButton(OverlayPlayButtonCheck.IsChecked == true);
         };
 
+        TouchVideoPauseAndDrawCheck.Click += (_, _) =>
+        {
+            if (_loadingUi)
+                return;
+            AppSettings.SetTouchVideoPauseAndDraw(TouchVideoPauseAndDrawCheck.IsChecked == true);
+        };
+
         NetaLoopCheck.Click += (_, _) =>
         {
             if (_loadingUi)
@@ -574,6 +581,7 @@ public sealed partial class SettingsWindow : Window
             ApplyFastPlaybackMaxFpsUi();
             NetaSwitchCrossfadeCheck.IsChecked = AppSettings.NetaSwitchCrossfadeEnabled;
             OverlayPlayButtonCheck.IsChecked = AppSettings.OverlayPlayButton;
+            TouchVideoPauseAndDrawCheck.IsChecked = AppSettings.TouchVideoPauseAndDraw;
             NetaLoopCheck.IsChecked = RemoteNetaLoopService.Instance.IsRunning;
             PerfMonitorCheck.IsChecked = AppSettings.PerfMonitorEnabled;
             PerfLogCheck.IsChecked = AppSettings.PerfLogEnabled;

@@ -65,6 +65,11 @@ public static class AppSettings
     public static bool OverlayPlayButton { get; private set; } = true;
 
     /// <summary>
+    /// ON: 再生中にペン/指で映像へ触れると一時停止し、そのまま書き込み可能。既定 OFF。
+    /// </summary>
+    public static bool TouchVideoPauseAndDraw { get; private set; }
+
+    /// <summary>
     /// ON: 操作パネル左下に CPU / メモリ / 遠隔プレビュー fps を表示。既定 OFF。
     /// </summary>
     public static bool PerfMonitorEnabled { get; private set; }
@@ -155,6 +160,8 @@ public static class AppSettings
                 FastPlaybackMaxFps = NormalizeFastPlaybackMaxFps(fastFps);
             if (dto.OverlayPlayButton is { } overlayPlay)
                 OverlayPlayButton = overlayPlay;
+            if (dto.TouchVideoPauseAndDraw is { } touchPauseDraw)
+                TouchVideoPauseAndDraw = touchPauseDraw;
             if (dto.PerfMonitorEnabled is { } perfMon)
                 PerfMonitorEnabled = perfMon;
             if (dto.PerfLogEnabled is { } perfLog)
@@ -321,6 +328,13 @@ public static class AppSettings
         Changed?.Invoke();
     }
 
+    public static void SetTouchVideoPauseAndDraw(bool enabled)
+    {
+        TouchVideoPauseAndDraw = enabled;
+        Persist();
+        Changed?.Invoke();
+    }
+
     public static void SetPerfMonitorEnabled(bool enabled)
     {
         PerfMonitorEnabled = enabled;
@@ -411,6 +425,7 @@ public static class AppSettings
                 VariableSpeedAudioEnabled = VariableSpeedAudioEnabled,
                 FastPlaybackMaxFps = FastPlaybackMaxFps,
                 OverlayPlayButton = OverlayPlayButton,
+                TouchVideoPauseAndDraw = TouchVideoPauseAndDraw,
                 PerfMonitorEnabled = PerfMonitorEnabled,
                 PerfLogEnabled = PerfLogEnabled,
                 DiagnosticCaptureEnabled = DiagnosticCaptureEnabled,
@@ -472,6 +487,7 @@ public static class AppSettings
         public bool? VariableSpeedAudioEnabled { get; set; }
         public int? FastPlaybackMaxFps { get; set; }
         public bool? OverlayPlayButton { get; set; }
+        public bool? TouchVideoPauseAndDraw { get; set; }
         public bool? PerfMonitorEnabled { get; set; }
         public bool? PerfLogEnabled { get; set; }
         public bool? DiagnosticCaptureEnabled { get; set; }

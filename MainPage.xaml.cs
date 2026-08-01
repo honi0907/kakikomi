@@ -52,7 +52,7 @@ public sealed partial class MainPage : Page
         AppSettings.Changed += OnAppSettingsChanged;
         App.SettingsOpenFailed += OnSettingsOpenFailed;
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
-        InkLayer.IsHitTestVisible = !ViewModel.IsPlaying;
+        UpdateInkLayerHitTest();
 
         ApplyChrome(PlayToggle, IdleBg, IdleFg);
         ApplyIdleChromeToSecondaryButtons();
@@ -157,7 +157,7 @@ public sealed partial class MainPage : Page
 
         if (e.PropertyName == nameof(ViewModel.IsPlaying))
         {
-            InkLayer.IsHitTestVisible = !ViewModel.IsPlaying;
+            UpdateInkLayerHitTest();
             UpdatePlayToggleLook();
         }
 
@@ -203,6 +203,7 @@ public sealed partial class MainPage : Page
         ApplyControlPanelChromeDock();
         UpdateDemoWatermark();
         UpdateOverlayPlayVisibility();
+        UpdateInkLayerHitTest();
         UpdatePerfMonitorVisibility();
         PerfMonitorService.Instance.ApplyFromSettings();
         DiagnosticCaptureService.Instance.ApplyFromSettings();
@@ -249,6 +250,9 @@ public sealed partial class MainPage : Page
         OverlayPlayBtn.Visibility = AppSettings.OverlayPlayButton
             ? Visibility.Visible
             : Visibility.Collapsed;
+
+    private void UpdateInkLayerHitTest() =>
+        InkLayer.IsHitTestVisible = !ViewModel.IsPlaying || AppSettings.TouchVideoPauseAndDraw;
 
     private void UpdatePerfMonitorVisibility()
     {
