@@ -24,6 +24,7 @@ html, body {
   background: var(--page);
   color: var(--text);
   font-family: "Segoe UI", system-ui, sans-serif;
+  touch-action: manipulation;
 }
 
 .hidden { display: none !important; }
@@ -347,7 +348,6 @@ input[type="text"] {
   align-items: center;
   overflow-x: auto;
   padding-bottom: 2px;
-  -webkit-overflow-scrolling: touch;
 }
 
 .sep {

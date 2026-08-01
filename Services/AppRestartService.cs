@@ -3,10 +3,10 @@ using System.Text;
 
 namespace Kakikomi.Services;
 
-/// <summary>遠隔などからアプリ本体を再起動する（2 秒後に同じ exe を起動）。</summary>
+/// <summary>遠隔などからアプリ本体を再起動する（1 秒後に同じ exe を起動）。</summary>
 internal static class AppRestartService
 {
-    private const int RestartDelaySec = 2;
+    private const int RestartDelaySec = 1;
 
     public static bool TryScheduleRestart(out string? error)
     {
