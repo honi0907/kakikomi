@@ -140,6 +140,43 @@ input[type="text"] {
   margin-bottom: 8px;
 }
 
+.sidebar-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.sidebar-tab {
+  min-height: 40px;
+  min-width: 0;
+  padding: 8px 10px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #020617;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.sidebar-tab.active {
+  background: var(--fill);
+  color: var(--fill-fg);
+  border-color: var(--fill);
+}
+
+.sidebar-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.sidebar-panel.hidden {
+  display: none !important;
+}
+
 .btn-reload {
   width: 100%;
   min-width: 0;
@@ -192,6 +229,89 @@ input[type="text"] {
   flex-direction: column;
   gap: 6px;
   min-height: 0;
+}
+
+.save-list {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+.save-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  text-align: left;
+  background: var(--fill);
+  color: var(--fill-fg);
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.35;
+  cursor: pointer;
+  width: 100%;
+}
+
+.save-item-name {
+  word-break: break-all;
+  font-weight: 600;
+}
+
+.save-item-meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.save-empty {
+  font-size: 12px;
+  margin: 8px 0 0;
+}
+
+.save-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(2, 6, 23, 0.92);
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+}
+
+.save-viewer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.save-viewer-title {
+  font-size: 12px;
+  color: var(--muted);
+  word-break: break-all;
+  flex: 1;
+  min-width: 0;
+}
+
+.save-viewer-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+}
+
+.save-viewer-body img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid var(--border);
 }
 
 .neta {

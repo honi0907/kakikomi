@@ -15,6 +15,18 @@
   const reloadNetasBtn = document.getElementById("reloadNetasBtn");
   const netaLoopBtn = document.getElementById("netaLoopBtn");
   const restartAppBtn = document.getElementById("restartAppBtn");
+  const tabNetas = document.getElementById("tabNetas");
+  const tabSaves = document.getElementById("tabSaves");
+  const panelNetas = document.getElementById("panelNetas");
+  const panelSaves = document.getElementById("panelSaves");
+  const reloadSavesBtn = document.getElementById("reloadSavesBtn");
+  const saveFolderLine = document.getElementById("saveFolderLine");
+  const saveList = document.getElementById("saveList");
+  const saveListEmpty = document.getElementById("saveListEmpty");
+  const saveViewer = document.getElementById("saveViewer");
+  const saveViewerImg = document.getElementById("saveViewerImg");
+  const saveViewerTitle = document.getElementById("saveViewerTitle");
+  const saveViewerClose = document.getElementById("saveViewerClose");
   const timeText = document.getElementById("timeText");
   const seekBar = document.getElementById("seekBar");
   const preview = document.getElementById("preview");
@@ -28,8 +40,117 @@
   let latestStatus = null;
   let reloading = false;
   let loopOn = false;
+  let savesLoading = false;
 
   pinInput.value = pin;
+
+  function apiHeaders() {
+    const headers = {};
+    if (pin) headers["X-Kakikomi-Pin"] = pin;
+    return headers;
+  }
+
+  function pinQuery() {
+    return pin ? `?pin=${encodeURIComponent(pin)}` : "";
+  }
+
+  function saveImageUrl(name) {
+    return `/api/saves/${encodeURIComponent(name)}${pinQuery()}`;
+  }
+
+  function formatBytes(n) {
+    if (!Number.isFinite(n) || n < 0) return "";
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function formatSaveTime(iso) {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString("ja-JP", {
+        month: "numeric",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return "";
+    }
+  }
+
+  function setSidebarTab(which) {
+    const saves = which === "saves";
+    tabNetas.classList.toggle("active", !saves);
+    tabSaves.classList.toggle("active", saves);
+    tabNetas.setAttribute("aria-selected", saves ? "false" : "true");
+    tabSaves.setAttribute("aria-selected", saves ? "true" : "false");
+    panelNetas.classList.toggle("hidden", saves);
+    panelSaves.classList.toggle("hidden", !saves);
+    if (saves) loadSaves();
+  }
+
+  async function loadSaves() {
+    if (savesLoading) return;
+    savesLoading = true;
+    reloadSavesBtn.disabled = true;
+    reloadSavesBtn.textContent = "読み込み中…";
+    saveList.innerHTML = "";
+    saveListEmpty.classList.add("hidden");
+    try {
+      const res = await fetch("/api/saves", { headers: apiHeaders() });
+      const data = await res.json();
+      if (!data.ok) {
+        saveListEmpty.textContent = data.error || "読み込みに失敗しました";
+        saveListEmpty.classList.remove("hidden");
+        return;
+      }
+      saveFolderLine.textContent = `保存: ${data.folderPath || "—"}`;
+      saveFolderLine.title = data.folderPath || "";
+      const files = data.files || [];
+      if (files.length === 0) {
+        saveListEmpty.textContent = "保存された PNG はありません";
+        saveListEmpty.classList.remove("hidden");
+        return;
+      }
+      files.forEach((f) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "save-item";
+        const name = document.createElement("span");
+        name.className = "save-item-name";
+        name.textContent = f.name;
+        const meta = document.createElement("span");
+        meta.className = "save-item-meta";
+        meta.textContent = `${formatSaveTime(f.modifiedUtc)} · ${formatBytes(f.sizeBytes)}`;
+        b.appendChild(name);
+        b.appendChild(meta);
+        b.onclick = () => openSaveViewer(f.name);
+        saveList.appendChild(b);
+      });
+    } catch {
+      saveListEmpty.textContent = "読み込みに失敗しました";
+      saveListEmpty.classList.remove("hidden");
+    } finally {
+      savesLoading = false;
+      reloadSavesBtn.disabled = false;
+      reloadSavesBtn.textContent = "保存一覧を更新";
+    }
+  }
+
+  function openSaveViewer(name) {
+    saveViewerTitle.textContent = name;
+    saveViewerImg.src = saveImageUrl(name);
+    saveViewer.classList.remove("hidden");
+    saveViewer.setAttribute("aria-hidden", "false");
+  }
+
+  function closeSaveViewer() {
+    saveViewer.classList.add("hidden");
+    saveViewer.setAttribute("aria-hidden", "true");
+    saveViewerImg.removeAttribute("src");
+    saveViewerTitle.textContent = "";
+  }
 
   function wsUrl() {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -65,8 +186,12 @@
     latestStatus = st;
 
     const folderLabel = st.folderName || st.folderPath || "未設定";
-    folderLine.textContent = `フォルダ: ${folderLabel}`;
+    folderLine.textContent = `ネタ: ${folderLabel}`;
     folderLine.title = st.folderPath || "";
+    if (st.saveFolderPath) {
+      saveFolderLine.textContent = `保存: ${st.saveFolderPath}`;
+      saveFolderLine.title = st.saveFolderPath;
+    }
     reloadNetasBtn.disabled = !st.folderPath || reloading;
 
     loopOn = !!st.netaLoop;
@@ -125,6 +250,7 @@
       auth.classList.add("hidden");
       app.classList.remove("hidden");
       send("refresh");
+      if (!panelSaves.classList.contains("hidden")) loadSaves();
     };
 
     ws.onmessage = (ev) => {
@@ -197,6 +323,14 @@
     } else {
       send("netaLoop", { enabled: true });
     }
+  };
+
+  tabNetas.onclick = () => setSidebarTab("netas");
+  tabSaves.onclick = () => setSidebarTab("saves");
+  reloadSavesBtn.onclick = () => loadSaves();
+  saveViewerClose.onclick = closeSaveViewer;
+  saveViewer.onclick = (e) => {
+    if (e.target === saveViewer) closeSaveViewer();
   };
 
   restartAppBtn.onclick = () => {

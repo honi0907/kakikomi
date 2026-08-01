@@ -24,17 +24,34 @@
         <div class="brand-sm">ネタ一覧</div>
         <button id="disconnectBtn" class="btn btn-ghost btn-sm">切断</button>
       </div>
-      <button id="reloadNetasBtn" class="btn btn-reload" title="操作PCのネタフォルダを再スキャン">
-        一覧を更新
-      </button>
-      <button id="netaLoopBtn" class="btn btn-loop" title="1本最後まで再生→次へ。最後の次は先頭">
-        ネタをループ
-      </button>
+      <div class="sidebar-tabs" role="tablist" aria-label="サイドバー">
+        <button id="tabNetas" class="sidebar-tab active" type="button" role="tab" aria-selected="true">ネタ</button>
+        <button id="tabSaves" class="sidebar-tab" type="button" role="tab" aria-selected="false">保存</button>
+      </div>
+
+      <div id="panelNetas" class="sidebar-panel" role="tabpanel">
+        <button id="reloadNetasBtn" class="btn btn-reload" title="操作PCのネタフォルダを再スキャン">
+          一覧を更新
+        </button>
+        <button id="netaLoopBtn" class="btn btn-loop" title="1本最後まで再生→次へ。最後の次は先頭">
+          ネタをループ
+        </button>
+        <div id="folderLine" class="folder-line muted">ネタ: —</div>
+        <div id="netaList" class="neta-list"></div>
+      </div>
+
+      <div id="panelSaves" class="sidebar-panel hidden" role="tabpanel">
+        <button id="reloadSavesBtn" class="btn btn-reload" title="save フォルダの PNG 一覧を再読み込み">
+          保存一覧を更新
+        </button>
+        <div id="saveFolderLine" class="folder-line muted">保存: —</div>
+        <div id="saveList" class="save-list"></div>
+        <p id="saveListEmpty" class="save-empty muted hidden">保存された PNG はありません</p>
+      </div>
+
       <button id="restartAppBtn" class="btn btn-restart" title="映像トラブル時の最終手段。アプリを再起動し通信は切断されます">
         強制再起動
       </button>
-      <div id="folderLine" class="folder-line muted">フォルダ: —</div>
-      <div id="netaList" class="neta-list"></div>
       <div id="statusLine" class="status-line muted">未接続</div>
     </aside>
 
@@ -81,6 +98,16 @@
         </div>
       </div>
     </main>
+  </div>
+
+  <div id="saveViewer" class="save-viewer hidden" aria-hidden="true">
+    <div class="save-viewer-bar">
+      <span id="saveViewerTitle" class="save-viewer-title"></span>
+      <button id="saveViewerClose" class="btn btn-ghost btn-sm" type="button">閉じる</button>
+    </div>
+    <div class="save-viewer-body">
+      <img id="saveViewerImg" alt="保存画像" />
+    </div>
   </div>
 
   <script src="app.js"></script>

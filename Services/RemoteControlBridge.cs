@@ -55,6 +55,7 @@ internal static class RemoteControlBridge
             folderName = string.IsNullOrWhiteSpace(folder)
                 ? null
                 : (Path.GetFileName(folder.TrimEnd('\\', '/')) is { Length: > 0 } n ? n : folder),
+            saveFolderPath = SaveFolderService.FolderPath,
             statusText = vm?.StatusText,
             netaLoop = RemoteNetaLoopService.Instance.IsRunning,
             netas

@@ -15,8 +15,9 @@ internal sealed class RemotePreviewCapture : IDisposable
 {
     private const int TargetWidth = 480;
     private const int IdleIntervalMs = 80;
-    private const int PlayingIntervalMs = 200;
+    private const int PlayingIntervalMs = 250;
     private const int SwitchPauseMs = 450;
+    private const int PlayResumeGraceMs = 600;
     private const int CircuitBreakerFailures = 5;
     private const int CircuitBreakerCooldownMs = 60_000;
     private const long JpegQuality = 35;
@@ -35,7 +36,6 @@ internal sealed class RemotePreviewCapture : IDisposable
     private int _retryScheduled;
     private long _lastEncodeTicks;
     private long _pauseUntilTicks;
-    private long _lastRelaySequence;
     private int _clientsConnected;
     private int _previewFailures;
     private long _circuitOpenUntil;
@@ -58,6 +58,7 @@ internal sealed class RemotePreviewCapture : IDisposable
         engine.VisibleSlotChanged += OnVisibleSlotChanged;
         engine.SourceChanged += OnSourceChanged;
         engine.PreviewKeyframeRequested += OnKeyframeRequested;
+        engine.PlaybackStateChanged += OnPlaybackStateChanged;
         UpdateTargetPlayer(engine.VisibleSlotIndex);
     }
 
@@ -68,7 +69,7 @@ internal sealed class RemotePreviewCapture : IDisposable
             Interlocked.Exchange(ref _clientsConnected, 1);
             RegisterHandler();
             ArmForceCapture();
-            TryCaptureFromRelay(force: true);
+            RequestCapture(force: true);
         }
         else
         {
@@ -90,6 +91,7 @@ internal sealed class RemotePreviewCapture : IDisposable
             _engine.VisibleSlotChanged -= OnVisibleSlotChanged;
             _engine.SourceChanged -= OnSourceChanged;
             _engine.PreviewKeyframeRequested -= OnKeyframeRequested;
+            _engine.PlaybackStateChanged -= OnPlaybackStateChanged;
         }
 
         lock (_gate)
@@ -140,7 +142,17 @@ internal sealed class RemotePreviewCapture : IDisposable
         if (Volatile.Read(ref _clientsConnected) != 1)
             return;
         ArmForceCapture();
-        TryCaptureFromRelay(force: true);
+        RequestCapture(force: true);
+    }
+
+    private void OnPlaybackStateChanged()
+    {
+        if (_engine?.IsPlaying == true)
+        {
+            Interlocked.Exchange(
+                ref _pauseUntilTicks,
+                Environment.TickCount64 + PlayResumeGraceMs);
+        }
     }
 
     private void UpdateTargetPlayer(int slot)
@@ -179,25 +191,10 @@ internal sealed class RemotePreviewCapture : IDisposable
         if (targetPlayer is null || !ReferenceEquals(player, targetPlayer))
             return;
 
-        TryCaptureFrame(target, width, height, force: false);
+        RequestCapture(force: false);
     }
 
-    private void TryCaptureFromRelay(bool force)
-    {
-        var player = _targetPlayer;
-        if (player is null)
-            return;
-
-        if (!VideoFrameRelay.TryGetFrame(player, out var target, out var width, out var height, out _))
-            return;
-
-        if (target is null)
-            return;
-
-        TryCaptureFrame(target, width, height, force);
-    }
-
-    private void TryCaptureFrame(CanvasRenderTarget target, int width, int height, bool force)
+    private void RequestCapture(bool force)
     {
         if (_disposed || Volatile.Read(ref _clientsConnected) != 1)
             return;
@@ -214,54 +211,54 @@ internal sealed class RemotePreviewCapture : IDisposable
         if (!force && now - Interlocked.Read(ref _lastEncodeTicks) < minInterval)
             return;
 
-        if (Interlocked.Exchange(ref _encoding, 1) == 1)
+        if (Interlocked.CompareExchange(ref _encoding, 1, 0) != 0)
             return;
 
-        byte[]? bgra = null;
-        var outW = 0;
-        var outH = 0;
+        _ = Task.Run(() => CaptureAndEncodeAsync(force));
+    }
 
+    private void CaptureAndEncodeAsync(bool force)
+    {
         try
         {
-            Interlocked.Exchange(ref _lastEncodeTicks, now);
-            if (!TryDownsample(target, width, height, out bgra, out outW, out outH) || bgra is null)
+            if (_disposed || Volatile.Read(ref _clientsConnected) != 1)
+                return;
+
+            var player = _targetPlayer;
+            if (player is null)
+                return;
+
+            if (!VideoFrameRelay.TryGetFrame(player, out var target, out var width, out var height, out _) ||
+                target is null)
             {
-                NotePreviewFailure("downsample empty");
-                Interlocked.Exchange(ref _encoding, 0);
                 return;
             }
 
-            Interlocked.Exchange(ref _forceNext, 0);
+            Interlocked.Exchange(ref _lastEncodeTicks, Environment.TickCount64);
+
+            if (!TryDownsample(target, width, height, out var bgra, out var outW, out var outH) ||
+                bgra is null)
+            {
+                NotePreviewFailure("downsample empty");
+                return;
+            }
+
+            if (force)
+                Interlocked.Exchange(ref _forceNext, 0);
             Interlocked.Exchange(ref _previewFailures, 0);
-            Interlocked.Increment(ref _lastRelaySequence);
+
+            var jpeg = EncodeJpegFromBgra(bgra, outW, outH);
+            if (jpeg is { Length: > 0 })
+                _onJpeg(jpeg);
         }
         catch (Exception ex)
         {
             NotePreviewFailure(ex.Message);
-            Interlocked.Exchange(ref _encoding, 0);
-            return;
         }
-
-        var pixels = bgra;
-        var w = outW;
-        var h = outH;
-        _ = Task.Run(() =>
+        finally
         {
-            try
-            {
-                var jpeg = EncodeJpegFromBgra(pixels, w, h);
-                if (jpeg is { Length: > 0 })
-                    _onJpeg(jpeg);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[RemotePreview] jpeg: {ex.Message}");
-            }
-            finally
-            {
-                Interlocked.Exchange(ref _encoding, 0);
-            }
-        });
+            Interlocked.Exchange(ref _encoding, 0);
+        }
     }
 
     private void ScheduleForceRetries(int generation)
@@ -302,7 +299,7 @@ internal sealed class RemotePreviewCapture : IDisposable
                         if (!engine.IsPlaying)
                             engine.RequestPausedFrameRefresh();
 
-                        TryCaptureFromRelay(force: true);
+                        RequestCapture(force: true);
                     });
                 }
             }

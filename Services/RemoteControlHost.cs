@@ -252,6 +252,42 @@ public sealed class RemoteControlHost : IDisposable
                 return;
             }
 
+            if (path.Equals("/api/saves", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!IsAuthorized(request.Headers, query))
+                {
+                    await WriteJsonAsync(stream, 401, new { ok = false, error = "unauthorized" }, token)
+                        .ConfigureAwait(false);
+                    return;
+                }
+
+                await WriteJsonAsync(stream, 200, RemoteSaveFolderApi.BuildListResponse(), token)
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            if (path.StartsWith("/api/saves/", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!IsAuthorized(request.Headers, query))
+                {
+                    await WriteHttpAsync(stream, 401, "text/plain; charset=utf-8", "unauthorized", token)
+                        .ConfigureAwait(false);
+                    return;
+                }
+
+                var fileName = Uri.UnescapeDataString(path["/api/saves/".Length..]);
+                if (!RemoteSaveFolderApi.TryResolveFile(fileName, out var savePath))
+                {
+                    await WriteHttpAsync(stream, 404, "text/plain; charset=utf-8", "not found", token)
+                        .ConfigureAwait(false);
+                    return;
+                }
+
+                var pngBytes = await File.ReadAllBytesAsync(savePath, token).ConfigureAwait(false);
+                await WriteHttpAsync(stream, 200, "image/png", pngBytes, token).ConfigureAwait(false);
+                return;
+            }
+
             await ServeStaticAsync(stream, path, token).ConfigureAwait(false);
         }
         catch (Exception ex)
